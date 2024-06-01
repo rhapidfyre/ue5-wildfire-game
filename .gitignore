@@ -6,7 +6,7 @@ Content/*
 .idea/*
 **/*/desktop.ini
 
-!*/TalesContent
+!*/WildfireContent
 
 # Visual Studio 2015 user specific files
 .vs/
