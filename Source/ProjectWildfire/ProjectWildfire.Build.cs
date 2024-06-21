@@ -8,6 +8,27 @@ public class ProjectWildfire : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
-        PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "NavigationSystem", "AIModule", "Niagara", "EnhancedInput" });
+        PublicDependencyModuleNames.AddRange(new string[]
+        {
+	        "Core",
+	        "CoreUObject",
+	        "Engine",
+	        "InputCore",
+	        "NavigationSystem",
+	        "AIModule",
+	        "Niagara",
+	        "ChaosVehicles"
+        });
+
+        PrivateDependencyModuleNames.AddRange(new string[] {
+	        "Slate",
+	        "SlateCore",
+	        "UMG",
+	        "EnhancedInput",
+	        "InputCore",
+	        "GameplayTags",
+	        "OnlineSubsystem",
+	        "OnlineSubsystemUtils"
+        });
     }
 }

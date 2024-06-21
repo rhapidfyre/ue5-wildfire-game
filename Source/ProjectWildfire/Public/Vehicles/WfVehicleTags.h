@@ -1,0 +1,25 @@
+﻿// Fill out your copyright notice in the Description page of Project Settings.
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "NativeGameplayTags.h"
+
+
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Vehicle_Civilian)
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Vehicle_Police)
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Vehicle_Fire)
+
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Vehicle_Fire_Chief)
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Vehicle_Fire_Medic)
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Vehicle_Fire_Engine)
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Vehicle_Fire_Engine_Wildland)
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Vehicle_Fire_Engine_Structure)
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Vehicle_Fire_Ladder)
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Vehicle_Fire_Squad)
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Vehicle_Fire_Dozer)
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Vehicle_Fire_Transport)
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Vehicle_Fire_Crew)
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Vehicle_Fire_Utility)
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Vehicle_Fire_Investigator)
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Vehicle_Fire_Helicopter)
