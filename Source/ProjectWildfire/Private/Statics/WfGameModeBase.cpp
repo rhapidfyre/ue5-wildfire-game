@@ -593,7 +593,7 @@ USaveGame* AWfGameModeBase::CreateNewCharacter(const FGameplayTag& NewCharacterR
     if (IsValid(GameSave))
     {
         // Do-while guarantees at least one execution
-        GameSave->SaveSlotIndex(0);
+        GameSave->SaveSlotIndex = 0;
         do
         {
             GameSave->SaveSlotName = GenerateRandomString(16);
