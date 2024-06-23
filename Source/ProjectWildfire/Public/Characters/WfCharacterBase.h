@@ -10,7 +10,8 @@
 
 #include "WfCharacterBase.generated.h"
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCharacterGenderSet,	const FGameplayTag&, NewGender);
+class USaveGame;
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCharacterGenderSet, const FGameplayTag&, NewGender);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCharacterAgeSet,		const int8,			 NewAge);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCharacterRaceSet,	const FGameplayTag&, NewRace);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCharacterRoleSet,	const FGameplayTag&, NewRole);
@@ -50,24 +51,44 @@ public:
 	FGameplayTag GetCharacterRole() const { return CharacterRole; }
 
 	UFUNCTION(BlueprintPure, Category = "Character Data")
-	FGameplayTag GetEthnicity() const { return EthnicGroup; }
+	FGameplayTag GetCharacterRace() const { return EthnicGroup; }
+
+	UFUNCTION(BlueprintCallable, Category = "Character Data")
+	void SetCharacterRole(const FGameplayTag& NewRole);
+
+	UFUNCTION(BlueprintCallable, Category = "Character Data")
+	void SetCharacterGender(const FGameplayTag& NewGender);
+
+	UFUNCTION(BlueprintCallable, Category = "Character Data")
+	void SetCharacterAge(const int NewAge);
+
+	UFUNCTION(BlueprintCallable, Category = "Character Data")
+	void SetCharacterName(const TArray<FString>& NewCharacterName);
+
+	UFUNCTION(BlueprintCallable, Category = "Character Data")
+	void SetCharacterRace(const FGameplayTag& NewCharacterRace);
+
+	virtual void LoadCharacter(USaveGame* CharacterSaveGame);
+
+	virtual void NewCharacter(const FGameplayTag& NewPrimaryRole);
+
 
 protected:
 
 	virtual void BeginPlay() override;
 
+	virtual void GetLifetimeReplicatedProps(
+		TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
 private:
 
-	FGameplayTag PickRandomEthnicGroup();
-
-	FGameplayTag PickRandomFatherEthnicGroup(const FGameplayTag& MotherEthnicGroup);
-
-	void DetermineMixedRaceOutcome(
-		const FGameplayTag& MotherEthnicGroup, const FGameplayTag& FatherEthnicGroup);
-
-	void GenerateRandomName();
-
-	void GenerateRandomRace();
+	UFUNCTION(NetMulticast, Reliable) void OnRep_NameFirst(const FString& OldValue);
+	UFUNCTION(NetMulticast, Reliable) void OnRep_NameMiddle(const FString& OldValue);
+	UFUNCTION(NetMulticast, Reliable) void OnRep_NameLast(const FString& OldValue);
+	UFUNCTION(NetMulticast, Reliable) void OnRep_CharacterAge(const int8& OldValue);
+	UFUNCTION(NetMulticast, Reliable) void OnRep_EthnicGroup(const FGameplayTag& OldValue);
+	UFUNCTION(NetMulticast, Reliable) void OnRep_CharacterGender(const FGameplayTag& OldValue);
+	UFUNCTION(NetMulticast, Reliable) void OnRep_CharacterRole(const FGameplayTag& OldValue);
 
 public:
 
@@ -77,24 +98,19 @@ public:
 	UPROPERTY(BlueprintAssignable) FOnCharacterRaceSet	 OnCharacterRaceSet;
 	UPROPERTY(BlueprintAssignable) FOnCharacterRoleSet	 OnCharacterRoleSet;
 
+	// All possible roles this character can take when spawning
+	// If empty, it will pick a random, most-appropriate role for the lowest child subclass
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character Data")
-	UDataTable* FirstNamesTable;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character Data")
-	UDataTable* LastNamesTable;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character Data")
-	FGameplayTag CharacterRole;
+	FGameplayTagContainer PossibleRoles;
 
 private:
 
-	FString NameFirst;
-	FString NameMiddle;
-	FString NameLast;
-
-	int8 CharacterAge;
-
-	FGameplayTag EthnicGroup;
-	FGameplayTag CharacterGender;
+	UPROPERTY(ReplicatedUsing = OnRep_NameFirst)		FString NameFirst;
+	UPROPERTY(ReplicatedUsing = OnRep_NameMiddle)		FString NameMiddle;
+	UPROPERTY(ReplicatedUsing = OnRep_nameLast)			FString NameLast;
+	UPROPERTY(ReplicatedUsing = OnRep_CharacterAge)		int8	CharacterAge;
+	UPROPERTY(ReplicatedUsing = OnRep_EthnicGroup)		FGameplayTag EthnicGroup;
+	UPROPERTY(ReplicatedUsing = OnRep_CharacterGender)	FGameplayTag CharacterGender;
+	UPROPERTY(ReplicatedUsing = OnRep_CharacterRole)	FGameplayTag CharacterRole;
 
 };

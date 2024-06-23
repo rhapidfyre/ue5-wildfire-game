@@ -37,6 +37,16 @@ void AWfGameStateBase::ForceUpdate()
 	}
 }
 
+USaveGame* AWfGameStateBase::CreateNewCharacter(const FGameplayTag& GetRole)
+{
+	AWfGameModeBase* GameMode = Cast<AWfGameModeBase>( GetWorld()->GetAuthGameMode() );
+	if (IsValid(GameMode))
+	{
+		return GameMode->CreateNewCharacter(GetRole);
+	}
+	return nullptr;
+}
+
 void AWfGameStateBase::SetGameDateTime(const FDateTime& NewGameDateTime)
 {
 	if (HasAuthority())

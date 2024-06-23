@@ -3,9 +3,11 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "GameplayTagContainer.h"
 #include "WfGlobalEnums.h"
-#include "GameFramework/GameStateBase.h"
 #include "Delegates/Delegate.h"
+#include "GameFramework/GameStateBase.h"
+#include "GameFramework/SaveGame.h"
 
 #include "WfGameStateBase.generated.h"
 
@@ -30,8 +32,9 @@ public:
 
 	AWfGameStateBase();
 
-	UFUNCTION(BlueprintCallable)
-	void ForceUpdate();
+	UFUNCTION(BlueprintCallable) void ForceUpdate();
+
+	UFUNCTION(BlueprintCallable) USaveGame* CreateNewCharacter(const FGameplayTag& GetRole);
 
 	void SetGameDateTime(const FDateTime& NewGameDateTime);
 

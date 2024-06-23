@@ -5,182 +5,139 @@
 
 #include "Characters/WfCharacterData.h"
 #include "Characters/WfCharacterTags.h"
+#include "Logging/StructuredLog.h"
+#include "Net/UnrealNetwork.h"
+#include "Saves/WfCharacterSaveGame.h"
+#include "Statics/WfGameStateBase.h"
 
-struct FEthnicGroup
+
+// Helper function to get all children of a parent FGameplayTag
+void GetChildTagsOfParent(const FGameplayTag& ParentTag, TArray<FGameplayTag>& OutChildTags, int& ChildDepth)
 {
-	FGameplayTag GroupName;
-	double Chance;
-};
+	if (ChildDepth < 1)
+		return;
+
+	ChildDepth--;
+	const UGameplayTagsManager& TagManager = UGameplayTagsManager::Get();
+	FGameplayTagContainer ChildTags = TagManager.RequestGameplayTagChildren(ParentTag);
+	for (const FGameplayTag& ChildTag : ChildTags)
+	{
+		OutChildTags.Add(ChildTag);
+
+		// Recursively get children of the current child tag
+		GetChildTagsOfParent(ChildTag, OutChildTags, ChildDepth);
+	}
+}
 
 // Sets default values
 AWfCharacterBase::AWfCharacterBase()
-	: FirstNamesTable(nullptr)
-	, LastNamesTable(nullptr)
+	: CharacterAge(18)
 {
 	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
+	CharacterRole = TAG_Role_Civilian.GetTag();
+}
+
+void AWfCharacterBase::SetCharacterRole(const FGameplayTag& NewRole)
+{
+	// All possible primary role categories
+	TArray<FGameplayTag> ChildTags;
+	int ChildDepth = 1;
+	GetChildTagsOfParent(TAG_Role.GetTag(), ChildTags, ChildDepth);
+
+	// If new role is any category or subcategory of a primary role, allow it.
+	FGameplayTagContainer PossibleTags = FGameplayTagContainer::CreateFromArray(ChildTags);
+	if (NewRole.MatchesAny(PossibleTags))
+	{
+		CharacterRole = NewRole;
+		if (OnCharacterRoleSet.IsBound())
+			OnCharacterRoleSet.Broadcast(NewRole);
+	}
+	else
+	{
+		UE_LOGFMT(LogTemp, Error,
+			"{CharName}({NetMode}): Requested Role '{NewRole}' is not a valid primary role type"
+			, GetName(), HasAuthority()?"SRV":"CLI", NewRole.ToString());
+	}
+}
+
+void AWfCharacterBase::SetCharacterGender(const FGameplayTag& NewGender)
+{
+	if (NewGender.MatchesTag(TAG_Gender.GetTag()))
+	{
+		CharacterGender = NewGender;
+		if (OnCharacterGenderSet.IsBound())
+			OnCharacterGenderSet.Broadcast(GetCharacterGender());
+	}
+	else
+	{
+		UE_LOGFMT(LogTemp, Error, "{CharName}({NetMode}): Invalid Gender Option '{GenderTag}'. Consider adding."
+			, GetName(), HasAuthority()?"SRV":"CLI", NewGender.ToString());
+	}
+}
+
+void AWfCharacterBase::SetCharacterAge(const int NewAge)
+{
+	if (HasAuthority())
+		CharacterAge = FMath::Clamp(NewAge, 18, 99);
+
+	if (OnCharacterAgeSet.IsBound())
+		OnCharacterAgeSet.Broadcast(GetCharacterAge());
+}
+
+void AWfCharacterBase::LoadCharacter(USaveGame* CharacterSaveGame)
+{
+	if (!HasAuthority())
+		return;
+
+	UWfCharacterSaveGame* CharacterSave = Cast<UWfCharacterSaveGame>(CharacterSaveGame);
+
+	// Saved Character
+	if (IsValid(CharacterSave))
+	{
+		SetCharacterRace(CharacterSave->CharacterRace);
+		SetCharacterRole(CharacterSave->CharacterRole);
+		SetCharacterAge(CharacterSave->CharacterAge);
+		SetCharacterGender(CharacterSave->CharacterGender);
+
+		TArray CharacterNameParts = {
+			CharacterSave->CharacterNameFirst,
+			CharacterSave->CharacterNameMiddle,
+			CharacterSave->CharacterNameLast
+		};
+		SetCharacterName(CharacterNameParts);
+	}
+
+	// New Character
+	else
+		NewCharacter(TAG_Role_Civilian.GetTag());
+}
+
+void AWfCharacterBase::NewCharacter(const FGameplayTag& NewPrimaryRole)
+{
+	AWfGameStateBase* GameState = Cast<AWfGameStateBase>( GetWorld()->GetGameState() );
+	if (IsValid(GameState))
+	{
+		GameState->CreateNewCharacter(TAG_Role_Civilian.GetTag());
+	}
 }
 
 // Called when the game starts or when spawned
 void AWfCharacterBase::BeginPlay()
 {
 	Super::BeginPlay();
-
-	CharacterAge	= FMath::RandRange(19,64);
-	if (OnCharacterAgeSet.IsBound())
-	{
-		OnCharacterAgeSet.Broadcast(GetCharacterAge());
-	}
-
-	CharacterGender = (FMath::RandRange(0.0f, 1.0f) > 0.15 ? TAG_Gender_Male : TAG_Gender_Female).GetTag();
-	if (FMath::RandRange(0.0f,1.0f) < 0.005)
-		{ CharacterGender = TAG_Gender_Non_Binary.GetTag(); }
-
-	if (OnCharacterGenderSet.IsBound())
-	{
-		OnCharacterGenderSet.Broadcast(GetCharacterGender());
-	}
-
-	CharacterRole = TAG_Role_Firefighter.GetTag();
-	if (OnCharacterRoleSet.IsBound())
-	{
-		OnCharacterRoleSet.Broadcast(GetCharacterRole());
-	}
-
-	GenerateRandomRace();
-	GenerateRandomName();
 }
 
-FGameplayTag AWfCharacterBase::PickRandomEthnicGroup()
+void AWfCharacterBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
-	TArray<FEthnicGroup> EthnicGroups = {
-		{TAG_Ethnicity_White.GetTag(), 0.616},
-		{TAG_Ethnicity_Black.GetTag(), 0.124},
-		{TAG_Ethnicity_Hispanic.GetTag(), 0.187},
-		{TAG_Ethnicity_Asian.GetTag(), 0.06},
-		{TAG_Ethnicity_NativeAmerican.GetTag(), 0.029},
-		{TAG_Ethnicity_PacificIslander.GetTag(), 0.002}
-	};
-
-	double RandValue = FMath::FRand();
-	double CumulativeChance = 0.0;
-
-	for (const auto& Group : EthnicGroups)
-	{
-		CumulativeChance += Group.Chance;
-		if (RandValue < CumulativeChance)
-		{
-			return Group.GroupName;
-		}
-	}
-
-	return EthnicGroups[0].GroupName;
-}
-
-FGameplayTag AWfCharacterBase::PickRandomFatherEthnicGroup(const FGameplayTag& MotherEthnicGroup)
-{
-	double InterracialChance = 0.151;
-	double RandValue = FMath::FRand();
-
-	if (RandValue < InterracialChance)
-	{
-		return PickRandomEthnicGroup();
-	}
-	return MotherEthnicGroup;
-}
-
-void AWfCharacterBase::DetermineMixedRaceOutcome(
-	const FGameplayTag& MotherEthnicGroup, const FGameplayTag& FatherEthnicGroup)
-{
-	if (MotherEthnicGroup != FatherEthnicGroup)
-	{
-		EthnicGroup = FMath::RandRange(0,1) == 0 ? MotherEthnicGroup : FatherEthnicGroup;
-		return;
-	}
-	EthnicGroup = MotherEthnicGroup;
-	if (OnCharacterRaceSet.IsBound())
-	{
-		OnCharacterRaceSet.Broadcast(GetEthnicity());
-	}
-}
-
-void AWfCharacterBase::GenerateRandomName()
-{
-	const FGameplayTag MyGender = GetCharacterGender();
-	const FGameplayTag MyEthnic = GetEthnicity();
-
-	// Ensure data tables are valid
-	if (!FirstNamesTable || !LastNamesTable)
-	{
-		UE_LOG(LogTemp, Error, TEXT("Name DataTables are not set!"));
-		NameFirst	= MyGender == TAG_Gender_Male.GetTag() ? "John" : "Jane";
-		NameMiddle	= "Q";
-		NameLast	= "Public";
-		return;
-	}
-
-	// Get random first name
-	const FString FirstNameContext = "";
-	TArray<FWfNamesStruct*> FirstNameRows;
-	FirstNamesTable->GetAllRows<FWfNamesStruct>(FirstNameContext, FirstNameRows);
-	TArray<FWfNamesStruct*> FirstNames;
-	for (const auto& FirstNameRow : FirstNameRows)
-	{
-		if (FirstNameRow->EthnicGroups.HasTag(MyEthnic))
-		{
-			if (FirstNameRow->bFeminine && MyGender != TAG_Gender_Male.GetTag())
-				{ FirstNames.Add(FirstNameRow); }
-			else if (FirstNameRow->bMasculine && MyGender != TAG_Gender_Female.GetTag())
-				{ FirstNames.Add(FirstNameRow); }
-		}
-	}
-	int32 FirstNameIndex = FMath::RandRange(0, FirstNames.Num() - 1);
-	NameFirst = FirstNames[FirstNameIndex]->NameValue;
-
-	// Get random last name
-	const FString LastNameContext;
-	TArray<FWfNamesStruct*> LastNameRows;
-	LastNamesTable->GetAllRows<FWfNamesStruct>(LastNameContext, LastNameRows);
-	TArray<FWfNamesStruct*> LastNames;
-	for (const auto& LastNameRow : LastNameRows)
-	{
-		if (LastNameRow->EthnicGroups.HasTag(MyEthnic))
-		{
-			if (LastNameRow->bFeminine && MyGender != TAG_Gender_Male.GetTag())
-				{ LastNames.Add(LastNameRow); }
-			else if (LastNameRow->bMasculine && MyGender != TAG_Gender_Female.GetTag())
-				{ LastNames.Add(LastNameRow); }
-		}
-	}
-	int32 LastNameIndex = FMath::RandRange(0, LastNames.Num() - 1);
-	NameLast = LastNames[LastNameIndex]->NameValue;
-
-	// Get random middle initial
-	char MiddleInitialChar = static_cast<char>(FMath::RandRange(65, 90));
-	NameMiddle = FString(1, &MiddleInitialChar);
-
-	if (OnCharacterNameSet.IsBound())
-	{
-		OnCharacterNameSet.Broadcast(GetCharacterName());
-	}
-
-}
-
-void AWfCharacterBase::GenerateRandomRace()
-{
-	// Generate mother's race
-	FGameplayTag MotherRace = PickRandomEthnicGroup();
-
-	// Generate father's race
-	FGameplayTag FatherRace = PickRandomFatherEthnicGroup(MotherRace);
-
-	// Determine mixed race outcome
-	DetermineMixedRaceOutcome(MotherRace, FatherRace);
-
-	// Output the result (for testing purposes)
-	GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Yellow, FString::Printf(TEXT("Mother's Race: %s"), *MotherRace.ToString()));
-	GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Yellow, FString::Printf(TEXT("Father's Race: %s"), *FatherRace.ToString()));
-	GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Yellow, FString::Printf(TEXT("Character's Race: %s"), *GetEthnicity().ToString()));
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(AWfCharacterBase, NameFirst);
+	DOREPLIFETIME(AWfCharacterBase, NameMiddle);
+	DOREPLIFETIME(AWfCharacterBase, NameLast);
+	DOREPLIFETIME(AWfCharacterBase, CharacterAge);
+	DOREPLIFETIME(AWfCharacterBase, EthnicGroup);
+	DOREPLIFETIME(AWfCharacterBase, CharacterGender);
+	DOREPLIFETIME(AWfCharacterBase, CharacterRole);
 }
 
 // Called every frame
@@ -207,6 +164,22 @@ bool AWfCharacterBase::EventSecondarySelect()
 	return false;
 }
 
+void AWfCharacterBase::SetCharacterName(const TArray<FString>& NewCharacterName)
+{
+	NameFirst  = NewCharacterName[0];
+	NameMiddle = NewCharacterName[1];
+	NameLast   = NewCharacterName[2];
+	if (OnCharacterNameSet.IsBound())
+		OnCharacterNameSet.Broadcast(GetCharacterName());
+}
+
+void AWfCharacterBase::SetCharacterRace(const FGameplayTag& NewCharacterRace)
+{
+	EthnicGroup = NewCharacterRace;
+	if (OnCharacterRaceSet.IsBound())
+		OnCharacterRaceSet.Broadcast(GetCharacterRace());
+}
+
 TArray<FString> AWfCharacterBase::GetCharacterNames() const
 {
 	return {NameFirst, NameMiddle, NameLast};
@@ -215,4 +188,53 @@ TArray<FString> AWfCharacterBase::GetCharacterNames() const
 FString AWfCharacterBase::GetCharacterName() const
 {
 	return FString(NameFirst + " " + NameMiddle + ". " + NameLast);
+}
+
+
+/**     ************************
+ *		REPLICATION & NETWORKING
+ */
+
+
+
+void AWfCharacterBase::OnRep_CharacterRole_Implementation(const FGameplayTag& OldValue)
+{
+	if (OnCharacterRoleSet.IsBound())
+		OnCharacterRoleSet.Broadcast(GetCharacterGender());
+}
+
+void AWfCharacterBase::OnRep_CharacterGender_Implementation(const FGameplayTag& OldValue)
+{
+	if (OnCharacterGenderSet.IsBound())
+		OnCharacterGenderSet.Broadcast(GetCharacterGender());
+}
+
+void AWfCharacterBase::OnRep_EthnicGroup_Implementation(const FGameplayTag& OldValue)
+{
+	if (OnCharacterRaceSet.IsBound())
+		OnCharacterRaceSet.Broadcast(GetCharacterRace());
+}
+
+void AWfCharacterBase::OnRep_CharacterAge_Implementation(const int8& OldValue)
+{
+	if (OnCharacterAgeSet.IsBound())
+		OnCharacterAgeSet.Broadcast(GetCharacterAge());
+}
+
+void AWfCharacterBase::OnRep_NameFirst_Implementation(const FString& OldValue)
+{
+	if (OnCharacterNameSet.IsBound())
+		OnCharacterNameSet.Broadcast(GetCharacterName());
+}
+
+void AWfCharacterBase::OnRep_NameMiddle_Implementation(const FString& OldValue)
+{
+	if (OnCharacterNameSet.IsBound())
+		OnCharacterNameSet.Broadcast(GetCharacterName());
+}
+
+void AWfCharacterBase::OnRep_NameLast_Implementation(const FString& OldValue)
+{
+	if (OnCharacterNameSet.IsBound())
+		OnCharacterNameSet.Broadcast(GetCharacterName());
 }

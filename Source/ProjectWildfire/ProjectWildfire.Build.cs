@@ -17,7 +17,9 @@ public class ProjectWildfire : ModuleRules
 	        "NavigationSystem",
 	        "AIModule",
 	        "Niagara",
-	        "ChaosVehicles"
+	        "ChaosVehicles",
+	        "GameplayAbilities",
+	        "GameplayTasks"
         });
 
         PrivateDependencyModuleNames.AddRange(new string[] {

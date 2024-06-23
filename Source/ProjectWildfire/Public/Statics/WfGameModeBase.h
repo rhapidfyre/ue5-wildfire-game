@@ -4,15 +4,20 @@
 
 #include "CoreMinimal.h"
 #include "WfGlobalEnums.h"
+#include "Engine/DataTable.h"
 #include "GameFramework/GameModeBase.h"
+#include "Saves/WfCharacterSaveGame.h"
 
 #include "WfGameModeBase.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTimeOfDay, const ETimeOfDay&, TimeOfDayEvent);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSeasonChange, const EClimateSeason&, NewSeason);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWeatherChange, const EWeatherCondition&, NewCondition);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnTemperatureChanged, const float&, TempAtSurface, const float&, TempAtAltitude);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnGameDateTimeUpdated, const FDateTime&, NewDateTime);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnJobContractExpired, const UWfFirefighterSaveGame*, ExpiredFirefighter);
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnTemperatureChanged, const float&, TempAtSurface, const float&, TempAtAltitude);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnJobContractOffer, const UWfFirefighterSaveGame*, ExpiredFirefighter, const int, ContractId);
 
 /**
  *
@@ -77,14 +82,29 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Weather Conditions")
 	float GetWindDirection() const { return WeatherWindSpeed; }
 
-
 	UFUNCTION(BlueprintCallable)
 	void SetTimeOfDayEvent(const ETimeOfDay& TimeOfDayEnum, const FTimespan& EventOccurence);
 
 	UFUNCTION(BlueprintCallable, Category = "Game Time")
 	const FDateTime& GetGameDateTime() const;
 
+	UFUNCTION(BlueprintCallable, Category = "Character Data")
+	TArray<FString> GenerateRandomName(
+			const FGameplayTag& Gender, const FGameplayTag& Ethnicity) const;
+
+	static FGameplayTag PickRandomEthnicGroup();
+	static FGameplayTag PickRandomFatherEthnicGroup(const FGameplayTag& MotherEthnicGroup);
+	static FGameplayTag DetermineMixedRaceOutcome(const FGameplayTag& MotherEthnicGroup, const FGameplayTag& FatherEthnicGroup);
+	static FGameplayTag GenerateRandomGender(const FGameplayTag& CharacterRole);
+	static FGameplayTag GenerateRandomRole(const FGameplayTag& PrimaryRole);
+	static FGameplayTag GenerateRandomRace();
+	static int			GenerateRandomAge(const FGameplayTag& CharacterRole);
+	static float CalculateHourlyRate(const FGameplayTag& CharacterRole, int YearsOfService);
+
+	USaveGame* CreateNewCharacter(const FGameplayTag& NewCharacterRole);
+
 protected:
+
 	virtual void BeginPlay() override;
 
 	virtual void UpdateTimeOfDay(const FDateTime& NewDateTime);
@@ -106,15 +126,28 @@ protected:
 private:
 
 	UFUNCTION() void ClimateChangeTick();
+
 	float CalcEnvironmentalLapseRate() const;
+
 	EAtmosphericStability CalcAtmosphericStability() const;
+
 	void SetCurrentSeason(const EClimateSeason& NewSeason);
+
 	void SetCurrentWeather(const EWeatherCondition& NewCondition);
+
 	void InitSeasonalTempAverages();
+
 	void InitDailyTemperatureRange();
+
 	void InitSeasonalDates();
 
 public:
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character Data")
+	UDataTable* FirstNamesTable;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character Data")
+	UDataTable* LastNamesTable;
 
 	// Allows overriding the starting date and time of the game
 	// If set to zero (epoch start), it will use the current UTC time and date.
@@ -150,6 +183,8 @@ public:
 	UPROPERTY(BlueprintAssignable)  FOnSeasonChange OnSeasonChange;
 	UPROPERTY(BlueprintAssignable)  FOnWeatherChange OnWeatherChange;
 	UPROPERTY(BlueprintAssignable)  FOnTemperatureChanged OnTemperatureChanged;
+	UPROPERTY(BlueprintAssignable)  FOnJobContractOffer OnJobContractOffer;
+	UPROPERTY(BlueprintAssignable)  FOnJobContractExpired OnJobContractExpired;
 
 private:
 
@@ -173,4 +208,7 @@ private:
 	FDateTime GameDateTime;
 	EClimateSeason CurrentSeason;
 	EWeatherCondition CurrentWeather;
+
+	// List of firefighters that can be hired
+	UPROPERTY() TArray<UWfFirefighterSaveGame*> FirefightersUnemployed;
 };

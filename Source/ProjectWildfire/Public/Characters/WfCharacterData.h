@@ -8,6 +8,11 @@
 
 #include "WfCharacterData.generated.h"
 
+struct FEthnicGroup
+{
+	FGameplayTag GroupName;
+	double Chance;
+};
 
 USTRUCT(BlueprintType)
 struct PROJECTWILDFIRE_API FWfNamesStruct : public FTableRowBase
