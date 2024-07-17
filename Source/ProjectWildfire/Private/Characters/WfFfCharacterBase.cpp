@@ -5,9 +5,12 @@
 
 #include "Characters/WfCharacterTags.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/WfScheduleComponent.h"
+#include "Gas/WfFfAttributeSet.h"
 #include "Logging/StructuredLog.h"
 #include "Net/UnrealNetwork.h"
 #include "Saves/WfCharacterSaveGame.h"
+#include "Statics/WfGameInstanceBase.h"
 #include "Statics/WfGameStateBase.h"
 
 
@@ -18,14 +21,47 @@ AWfFfCharacterBase::AWfFfCharacterBase()
 
 	AbilityComponent = CreateDefaultSubobject<UWfAbilityComponent>("AbilityComponent");
 	AbilityComponent->SetIsReplicated(true);
+
+	ScheduleComponent = CreateDefaultSubobject<UWfScheduleComponent>("ScheduleComponent");
+	//ScheduleComponent->SetIsReplicated(false);
+}
+
+void AWfFfCharacterBase::SaveCharacter()
+{
+	Super::SaveCharacter();
 }
 
 void AWfFfCharacterBase::SetHourlyRate(float NewHourlyRate)
 {
+	float MinimumRate = 0.0f;
 	const float OldHourlyRate = GetHourlyRate();
-	HourlyRate = NewHourlyRate;
+	UWfGameInstanceBase* GameInstance = Cast<UWfGameInstanceBase>(GetGameInstance());
+	if (IsValid(GameInstance))
+		MinimumRate = GameInstance->GetMinimumWage();
+	HourlyRate = FMath::Clamp(NewHourlyRate, MinimumRate, INT_MAX);
 	if (OnHourlyRateChanged.IsBound())
 		OnHourlyRateChanged.Broadcast(OldHourlyRate, GetHourlyRate());
+}
+
+FJobContractData AWfFfCharacterBase::GetFirefighterJobContract()
+{
+	if (!UGameplayStatics::DoesSaveGameExist(ContractId, ContractUserIndex))
+	{
+		SaveCharacter();
+	}
+	USaveGame* SaveGame = UGameplayStatics::LoadGameFromSlot(ContractId, ContractUserIndex);
+	if (IsValid(SaveGame))
+	{
+		FJobContractData JobContract(Cast<UWfFirefighterSaveGame>(SaveGame));
+		return JobContract;
+	}
+	return {};
+}
+
+void AWfFfCharacterBase::SetJobContract(const FString& NewContractId, const int32 ContractIndex)
+{
+	ContractId = NewContractId;
+	ContractUserIndex = ContractIndex;
 }
 
 void AWfFfCharacterBase::EventBeginOverlap(AActor* OverlappedActor)
@@ -48,10 +84,6 @@ bool AWfFfCharacterBase::IsEligible()
 void AWfFfCharacterBase::BeginPlay()
 {
 	Super::BeginPlay();
-
-	if (AbilityComponent && HasAuthority())
-		AbilityComponent->InitializeAttributes();
-
 }
 
 void AWfFfCharacterBase::OnConstruction(const FTransform& Transform)

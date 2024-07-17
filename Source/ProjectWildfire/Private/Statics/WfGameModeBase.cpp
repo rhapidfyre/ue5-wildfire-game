@@ -28,15 +28,19 @@ FString GenerateRandomString(int32 Length)
 
 
 AWfGameModeBase::AWfGameModeBase()
-    : TemperatureSurface(24.0f),
-      TemperatureAltitude(24.0f),
-      AltitudeDiff(1),
-      WeatherAirStability(0),
-      WeatherWindSpeed(0),
-      WeatherHumidity(0),
-      DroughtFactor(0),
-      CurrentSeason(EClimateSeason::EarlySpring),
-      CurrentWeather(EWeatherCondition::Clear)
+    : FirstNamesTable(nullptr)
+    ,  LastNamesTable(nullptr)
+    ,  bUseSeasons(false)
+    ,  bUseMetricSystem(false)
+    ,  TemperatureSurface(24.0f)
+    ,  TemperatureAltitude(24.0f)
+    ,  AltitudeDiff(1)
+    ,  WeatherAirStability(0)
+    ,  WeatherWindSpeed(0)
+    ,  WeatherHumidity(0)
+    ,  DroughtFactor(0)
+    ,  CurrentSeason(EClimateSeason::EarlySpring)
+    ,  CurrentWeather(EWeatherCondition::Clear)
 {
     SimulationSpeed = 180.0f; // 1 real second = 'n' game seconds
 }
@@ -302,6 +306,16 @@ void AWfGameModeBase::ClimateChangeTick()
 
 }
 
+FJobContractData AWfGameModeBase::ConvertSaveToJobContract(const UWfFirefighterSaveGame* SaveGame)
+{
+    if (IsValid(SaveGame))
+    {
+        FJobContractData JobContract(SaveGame);
+        return JobContract;
+    }
+    return {};
+}
+
 /**
  * \brief Updates the current date and time, broadcasting to the OnTimeOfDay event.
  * \param NewDateTime The new date time to replace the current date time with
@@ -315,18 +329,35 @@ void AWfGameModeBase::UpdateTimeOfDay(const FDateTime& NewDateTime)
     const FTimespan OldTimeOfDate = OldDateTime.GetTimeOfDay();
     const FTimespan NowTimeOfDate = NewDateTime.GetTimeOfDay();
 
+    if (OnGameHourlyTick.IsBound())
+    {
+        if (OldDateTime.GetHour() < NewDateTime.GetHour())
+        {
+            OnGameHourlyTick.Broadcast(NewDateTime);
+        }
+    }
+
+    // Generating saves in BeginPlay causes crashes
+    if (bFirstRun)
+    {
+        for (int i = FirefightersUnemployed.Num(); i < 10; ++i)
+        {
+            UWfSaveGame* NewSaveGame = CreateNewCharacter(TAG_Role_Fire.GetTag());
+            UWfFirefighterSaveGame* FirefighterSaveGame = Cast<UWfFirefighterSaveGame>(NewSaveGame);
+            if (IsValid(FirefighterSaveGame))
+            {
+                JobContractOffer(FirefighterSaveGame);
+            }
+        }
+        bFirstRun = false;
+    }
+
     // Remove expired hiring offers
     for (auto& FirefighterOffer : FirefightersUnemployed)
     {
         if (FirefighterOffer->OfferExpiration < FDateTime::UtcNow())
         {
-            UWfFirefighterSaveGame* ExpiredFirefighter = FirefighterOffer;
-            UE_LOGFMT(LogTemp, Display, "The job contract for '{FfName}' has expired."
-                , FirefighterOffer->CharacterNameFirst + FirefighterOffer->CharacterNameLast);
-            if (OnJobContractExpired.IsBound())
-                OnJobContractExpired.Broadcast(ExpiredFirefighter);
-            FirefightersUnemployed.Remove(FirefighterOffer);
-            UGameplayStatics::DeleteGameInSlot(FirefighterOffer->SaveSlotName, FirefighterOffer->SaveSlotIndex);
+            JobContractExpired(FJobContractData(FirefighterOffer));
         }
     }
 
@@ -353,6 +384,18 @@ void AWfGameModeBase::UpdateTimeOfDay(const FDateTime& NewDateTime)
                 UE_LOGFMT(LogTemp, Warning, "Time of Day Event = '{EventName}'",
                     UEnum::GetValueAsString(TimeOfDayEvent.Key));
                 OnTimeOfDay.Broadcast(TimeOfDayEvent.Key);
+
+                // Every day at Start of Business refresh the roster back up to 10
+                if (TimeOfDayEvent.Key == ETimeOfDay::StartOfBusiness)
+                {
+                    for (int i = FirefightersUnemployed.Num(); i < 10; ++i)
+                    {
+                        UWfSaveGame* NewSaveGame = CreateNewCharacter(TAG_Role_Fire.GetTag());
+                        UWfFirefighterSaveGame* FirefighterSaveGame = Cast<UWfFirefighterSaveGame>(NewSaveGame);
+                        if (IsValid(FirefighterSaveGame))
+                            JobContractOffer(FirefighterSaveGame);
+                    }
+                }
             }
         }
     }
@@ -573,35 +616,25 @@ float AWfGameModeBase::CalculateHourlyRate(const FGameplayTag& CharacterRole, in
  * \param NewCharacterRole The highest level role to assume.
  *                          If given a primary role, a secondary/sub-role will be generated.
  */
-USaveGame* AWfGameModeBase::CreateNewCharacter(const FGameplayTag& NewCharacterRole)
+UWfSaveGame* AWfGameModeBase::CreateNewCharacter(const FGameplayTag& NewCharacterRole)
 {
     USaveGame* SaveGame = nullptr;
     if (NewCharacterRole.MatchesTag(TAG_Role_Fire.GetTag()))
         SaveGame = UGameplayStatics::CreateSaveGameObject( UWfFirefighterSaveGame::StaticClass() );
     else if (NewCharacterRole.MatchesTag(TAG_Role_Police.GetTag()))
-        SaveGame = UGameplayStatics::CreateSaveGameObject( UWfFirefighterSaveGame::StaticClass() );
+        SaveGame = UGameplayStatics::CreateSaveGameObject( UWfSaveGame::StaticClass() /* UWfOfficerSaveGame::StaticClass() */ );
     else if (NewCharacterRole.MatchesTag(TAG_Role_Civilian.GetTag()))
-        SaveGame = UGameplayStatics::CreateSaveGameObject( UWfFirefighterSaveGame::StaticClass() );
+        SaveGame = UGameplayStatics::CreateSaveGameObject( UWfSaveGame::StaticClass() /* UWfCivilianSaveGame::StaticClass() */ );
     else if (NewCharacterRole.MatchesTag(TAG_Role_Player.GetTag()))
-        SaveGame = UGameplayStatics::CreateSaveGameObject( UWfFirefighterSaveGame::StaticClass() );
+        SaveGame = UGameplayStatics::CreateSaveGameObject( UWfSaveGame::StaticClass() /* UWfPlayerSaveGame::StaticClass() */);
 
     if (!IsValid(SaveGame))
         return nullptr;
 
     // Initialization that applies to all save games
     UWfSaveGame* GameSave = Cast<UWfSaveGame>(SaveGame);
-    if (IsValid(GameSave))
-    {
-        // Do-while guarantees at least one execution
-        GameSave->SaveSlotIndex = 0;
-        do
-        {
-            GameSave->SaveSlotName = GenerateRandomString(16);
-        }
-        while (UGameplayStatics::DoesSaveGameExist(GameSave->SaveSlotName, GameSave->SaveSlotIndex));
-        UE_LOGFMT(LogTemp, Display, "Created a new Character Save (Slot '{SaveSlot}' @ Index '{SaveIndex}')"
-            , GameSave->SaveSlotName, GameSave->SaveSlotIndex);
-    }
+    if (!IsValid(GameSave))
+        return nullptr;
 
     // Initialization that applies to all characters
     UWfCharacterSaveGame* NewCharacter = Cast<UWfCharacterSaveGame>(SaveGame);
@@ -627,15 +660,10 @@ USaveGame* AWfGameModeBase::CreateNewCharacter(const FGameplayTag& NewCharacterR
         NewFirefighter->HourlyRate      = CalculateHourlyRate(NewFirefighter->CharacterRole, 0);
         NewFirefighter->OfferExpiration = FDateTime::UtcNow()
             + FTimespan(FMath::RandRange(0,5), FMath::RandRange(4, 23), 0, 0);
-        const int NewIndex = FirefightersUnemployed.Add(NewFirefighter);
-        if (OnJobContractOffer.IsBound())
-            OnJobContractOffer.Broadcast(NewFirefighter, NewIndex);
-        UE_LOGFMT(LogTemp, Display, "A new job contract from '{FfName}' has been received."
-            , NewFirefighter->CharacterNameFirst + NewFirefighter->CharacterNameLast);
     }
 
-
-    return SaveGame;
+    UGameplayStatics::SaveGameToSlot(GameSave, GameSave->SaveSlotName, GameSave->SaveSlotIndex);
+    return GameSave;
 }
 
 void AWfGameModeBase::DetermineTemperature()
@@ -708,4 +736,45 @@ ETimeOfDay AWfGameModeBase::DetermineTimeOfDay()
         return TimeOfDayEvent.Key;
     }
     return ETimeOfDay::Noon;
+}
+
+void AWfGameModeBase::JobContractOffer(USaveGame* SaveGame)
+{
+    UWfFirefighterSaveGame* FfSaveGame = Cast<UWfFirefighterSaveGame>(SaveGame);
+    if (IsValid(FfSaveGame))
+    {
+        FRWScopeLock WriteLock(TransferListRWLock, SLT_Write);
+        FirefightersUnemployed.Add(FfSaveGame);
+        const FJobContractData JobContract(FfSaveGame);
+        if (OnJobContractOffer.IsBound())
+            OnJobContractOffer.Broadcast(JobContract);
+    }
+}
+
+void AWfGameModeBase::JobContractExpired(const FJobContractData& JobContract)
+{
+    const UWfFirefighterSaveGame* SaveGame = JobContract.SaveReference;
+    if (IsValid(SaveGame))
+    {
+        FRWScopeLock WriteLock(TransferListRWLock, SLT_Write);
+        for (int i = 0; i < FirefightersUnemployed.Num(); ++i)
+        {
+            if (FirefightersUnemployed.IsValidIndex(i))
+            {
+                UWfFirefighterSaveGame* FirefighterSave = FirefightersUnemployed[i];
+                if (FirefighterSave == SaveGame)
+                {
+                    UE_LOGFMT(LogTemp, Display, "Job Contract #{ContractId} for '{FfName}' expired or was deleted."
+                        , FirefighterSave->SaveSlotName, FirefighterSave->CharacterNameFirst + FirefighterSave->CharacterNameLast);
+                    FirefightersUnemployed.RemoveAt(i);
+                    if (OnJobContractExpired.IsBound())
+                    {
+                        OnJobContractExpired.Broadcast(JobContract);
+                    }
+                    UGameplayStatics::DeleteGameInSlot(JobContract.ContractId, JobContract.UserIndex);
+                    return;
+                }
+            }
+        }
+    }
 }

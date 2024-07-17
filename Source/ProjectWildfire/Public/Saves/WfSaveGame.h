@@ -4,6 +4,9 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/SaveGame.h"
+#include "Kismet/GameplayStatics.h"
+#include "Logging/StructuredLog.h"
+#include "Statics/WfUtilities.h"
 
 #include "WfSaveGame.generated.h"
 
@@ -14,7 +17,9 @@ class PROJECTWILDFIRE_API UWfSaveGame : public USaveGame
 public:
 	UWfSaveGame() : SaveSlotName("Untitled"), SaveSlotIndex(0) {}
 
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Character Save Data")
 	FString SaveSlotName;
 
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Character Save Data")
 	int SaveSlotIndex;
 };

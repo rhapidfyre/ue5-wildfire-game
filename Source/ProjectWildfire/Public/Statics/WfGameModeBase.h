@@ -14,10 +14,12 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTimeOfDay, const ETimeOfDay&, Tim
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSeasonChange, const EClimateSeason&, NewSeason);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWeatherChange, const EWeatherCondition&, NewCondition);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnGameDateTimeUpdated, const FDateTime&, NewDateTime);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnJobContractExpired, const UWfFirefighterSaveGame*, ExpiredFirefighter);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnGameHourlyTick, const FDateTime&, CurrentTime);
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnTemperatureChanged, const float&, TempAtSurface, const float&, TempAtAltitude);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnJobContractOffer, const UWfFirefighterSaveGame*, ExpiredFirefighter, const int, ContractId);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnJobContractOffer, const FJobContractData&, JobContractData);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnJobContractExpired, const FJobContractData&, JobContractData);
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnTemperatureChanged, const float, TempAtSurface, const float, TempAtAltitude);
 
 /**
  *
@@ -92,6 +94,9 @@ public:
 	TArray<FString> GenerateRandomName(
 			const FGameplayTag& Gender, const FGameplayTag& Ethnicity) const;
 
+	UFUNCTION(BlueprintPure, Category = "Game Data")
+	TArray<UWfFirefighterSaveGame*> GetListOfTransfers() const { return FirefightersUnemployed; };
+
 	static FGameplayTag PickRandomEthnicGroup();
 	static FGameplayTag PickRandomFatherEthnicGroup(const FGameplayTag& MotherEthnicGroup);
 	static FGameplayTag DetermineMixedRaceOutcome(const FGameplayTag& MotherEthnicGroup, const FGameplayTag& FatherEthnicGroup);
@@ -101,9 +106,14 @@ public:
 	static int			GenerateRandomAge(const FGameplayTag& CharacterRole);
 	static float CalculateHourlyRate(const FGameplayTag& CharacterRole, int YearsOfService);
 
-	USaveGame* CreateNewCharacter(const FGameplayTag& NewCharacterRole);
+	UWfSaveGame* CreateNewCharacter(const FGameplayTag& NewCharacterRole);
+
+	virtual void JobContractExpired(const FJobContractData& JobContract);
 
 protected:
+
+	UFUNCTION(BlueprintCallable)
+	static FJobContractData ConvertSaveToJobContract(const UWfFirefighterSaveGame* SaveGame);
 
 	virtual void BeginPlay() override;
 
@@ -122,6 +132,8 @@ protected:
 	virtual void DetermineWeatherCondition();
 
 	virtual ETimeOfDay DetermineTimeOfDay();
+
+	virtual void JobContractOffer(USaveGame* SaveGame);
 
 private:
 
@@ -182,6 +194,7 @@ public:
 	UPROPERTY(BlueprintAssignable)	FOnTimeOfDay OnTimeOfDay;
 	UPROPERTY(BlueprintAssignable)  FOnSeasonChange OnSeasonChange;
 	UPROPERTY(BlueprintAssignable)  FOnWeatherChange OnWeatherChange;
+	UPROPERTY(BlueprintAssignable)  FOnGameHourlyTick OnGameHourlyTick;
 	UPROPERTY(BlueprintAssignable)  FOnTemperatureChanged OnTemperatureChanged;
 	UPROPERTY(BlueprintAssignable)  FOnJobContractOffer OnJobContractOffer;
 	UPROPERTY(BlueprintAssignable)  FOnJobContractExpired OnJobContractExpired;
@@ -210,5 +223,8 @@ private:
 	EWeatherCondition CurrentWeather;
 
 	// List of firefighters that can be hired
+	bool bFirstRun = true;
 	UPROPERTY() TArray<UWfFirefighterSaveGame*> FirefightersUnemployed;
+
+	mutable FRWLock TransferListRWLock;
 };

@@ -7,11 +7,13 @@
 #include "Delegates/Delegate.h"
 #include "Gas/WfAbilityComponent.h"
 #include "Interfaces/WfFireStationInterface.h"
+#include "Saves/WfCharacterSaveGame.h"
 
 #include "WfFfCharacterBase.generated.h"
 
+class UWfScheduleComponent;
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnHourlyRateChanged,
-	const float&, OldHourlyRate, const float&, NewHourlyRate);
+                                             const float&, OldHourlyRate, const float&, NewHourlyRate);
 
 /**
  * \brief Base class for firefighter characters
@@ -25,11 +27,18 @@ public:
 
 	AWfFfCharacterBase();
 
+	virtual void SaveCharacter() override;
+
 	UFUNCTION(BlueprintCallable)
 	void SetHourlyRate(float NewHourlyRate = 3.0f);
 
 	UFUNCTION(BlueprintPure)
+	FJobContractData GetFirefighterJobContract();
+
+	UFUNCTION(BlueprintPure)
 	float GetHourlyRate() const { return HourlyRate; }
+
+	void SetJobContract(const FString& NewContractId, const int32 ContractIndex);
 
 	// Implement the IOverlapDetector interface
 	virtual void EventBeginOverlap(AActor* OverlappedActor) override;
@@ -57,19 +66,23 @@ protected:
 
 public:
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Actor Component")
-	UWfAbilityComponent* AbilityComponent;
-
 	UPROPERTY(BlueprintAssignable)
 	FOnHourlyRateChanged OnHourlyRateChanged;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Actor Component")
+	UWfScheduleComponent* ScheduleComponent;
+
 private:
-	bool bInQuarters;
+	UPROPERTY(Replicated) bool bInQuarters;
 
-	int YearsOfService;
+	UPROPERTY(Replicated) int YearsOfService;
 
-	int YearsInGrade;
+	UPROPERTY(Replicated) int YearsInGrade;
 
-	float HourlyRate;
+	UPROPERTY(Replicated) float HourlyRate;
+
+	FString ContractId;
+
+	int32 ContractUserIndex;
 
 };

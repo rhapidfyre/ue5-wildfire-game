@@ -21,6 +21,8 @@ enum class ETimeOfDay : uint8
 	Dusk,
 	HighNoon,
 	Nightfall,
+	StartOfBusiness,
+	CloseOfBusiness
 };
 
 UENUM(BlueprintType)

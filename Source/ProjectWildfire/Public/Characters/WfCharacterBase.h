@@ -10,6 +10,8 @@
 
 #include "WfCharacterBase.generated.h"
 
+class UWfAttributeSet;
+class UWfAbilityComponent;
 class USaveGame;
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCharacterGenderSet, const FGameplayTag&, NewGender);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCharacterAgeSet,		const int8,			 NewAge);
@@ -26,6 +28,10 @@ class PROJECTWILDFIRE_API AWfCharacterBase : public ACharacter, public IWfClicka
 public:
 
 	AWfCharacterBase();
+
+	UFUNCTION(BlueprintCallable) void Save() { SaveCharacter(); };
+
+	virtual void SaveCharacter();
 
 	virtual void Tick(float DeltaTime) override;
 
@@ -98,6 +104,9 @@ public:
 	UPROPERTY(BlueprintAssignable) FOnCharacterRaceSet	 OnCharacterRaceSet;
 	UPROPERTY(BlueprintAssignable) FOnCharacterRoleSet	 OnCharacterRoleSet;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Character Data")
+	UWfAbilityComponent* AbilityComponent;
+
 	// All possible roles this character can take when spawning
 	// If empty, it will pick a random, most-appropriate role for the lowest child subclass
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character Data")
@@ -112,5 +121,7 @@ private:
 	UPROPERTY(ReplicatedUsing = OnRep_EthnicGroup)		FGameplayTag EthnicGroup;
 	UPROPERTY(ReplicatedUsing = OnRep_CharacterGender)	FGameplayTag CharacterGender;
 	UPROPERTY(ReplicatedUsing = OnRep_CharacterRole)	FGameplayTag CharacterRole;
+
+	UPROPERTY() UWfAttributeSet* CharacterAttributes;
 
 };

@@ -1,10 +1,8 @@
 ﻿// Fill out your copyright notice in the Description page of Project Settings.
 
 
-#include "WfFireStationBase.h"
+#include "Actors/WfFireStationBase.h"
 
-#include "OnlineSubsystem.h"
-#include "OnlineSubsystemUtils.h"
 #include "Controllers/WfPlayerControllerBase.h"
 #include "Interfaces/WfFireStationInterface.h"
 #include "Kismet/GameplayStatics.h"
@@ -31,6 +29,9 @@ AWfFireStationBase::AWfFireStationBase()
 	BoundaryBox->OnComponentBeginOverlap.AddDynamic(this, &AWfFireStationBase::OnOverlapBegin);
 	BoundaryBox->OnComponentEndOverlap.AddDynamic(this, &AWfFireStationBase::OnOverlapEnd);
 	SetActorEnableCollision(true);
+
+	SpawnPoint = CreateDefaultSubobject<USceneComponent>("SpawnPoint");
+	SpawnPoint->SetupAttachment(BoundaryBox);
 }
 
 void AWfFireStationBase::SetFireStationOwner(const APlayerController* PlayerController)

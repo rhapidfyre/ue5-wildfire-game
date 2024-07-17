@@ -5,10 +5,13 @@
 
 #include "Characters/WfCharacterData.h"
 #include "Characters/WfCharacterTags.h"
+#include "Gas/WfAttributeSet.h"
 #include "Logging/StructuredLog.h"
 #include "Net/UnrealNetwork.h"
 #include "Saves/WfCharacterSaveGame.h"
+#include "Statics/WfGameInstanceBase.h"
 #include "Statics/WfGameStateBase.h"
+#include "Statics/WfPlayerStateBase.h"
 
 
 // Helper function to get all children of a parent FGameplayTag
@@ -36,6 +39,12 @@ AWfCharacterBase::AWfCharacterBase()
 	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
 	CharacterRole = TAG_Role_Civilian.GetTag();
+
+	CharacterAttributes = CreateDefaultSubobject<UWfAttributeSet>(TEXT("CharacterAttributes"));
+}
+
+void AWfCharacterBase::SaveCharacter()
+{
 }
 
 void AWfCharacterBase::SetCharacterRole(const FGameplayTag& NewRole)
@@ -66,6 +75,22 @@ void AWfCharacterBase::SetCharacterGender(const FGameplayTag& NewGender)
 	if (NewGender.MatchesTag(TAG_Gender.GetTag()))
 	{
 		CharacterGender = NewGender;
+
+		const UWfGameInstanceBase* GameInstanceBase = Cast<UWfGameInstanceBase>(GetWorld()->GetGameInstance());
+		if (IsValid(GameInstanceBase))
+		{
+			FMeshOptionsData MeshOptionsData = GameInstanceBase->GetMeshOptionsData(NewGender);
+
+			if (IsValid(MeshOptionsData.UsingMesh))
+				GetMesh()->SetSkeletalMesh(MeshOptionsData.UsingMesh);
+
+			if (IsValid(MeshOptionsData.UsingAnim))
+				GetMesh()->SetAnimInstanceClass(MeshOptionsData.UsingAnim);
+
+			GetMesh()->SetRelativeLocation(MeshOptionsData.MeshOffset.GetLocation());
+			GetMesh()->SetRelativeRotation(MeshOptionsData.MeshOffset.GetRotation());
+
+		}
 		if (OnCharacterGenderSet.IsBound())
 			OnCharacterGenderSet.Broadcast(GetCharacterGender());
 	}
@@ -126,6 +151,10 @@ void AWfCharacterBase::NewCharacter(const FGameplayTag& NewPrimaryRole)
 void AWfCharacterBase::BeginPlay()
 {
 	Super::BeginPlay();
+	if (CharacterAttributes && AbilityComponent && HasAuthority())
+	{
+		AbilityComponent->InitializeAttributes(CharacterAttributes);
+	}
 }
 
 void AWfCharacterBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
