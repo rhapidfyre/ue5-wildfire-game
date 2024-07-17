@@ -3,10 +3,10 @@ Plugins/RiderLink/**/*
 Plugins/Developer/RiderLink/**/*
 Plugins/**/Binaries/*
 Content/*
+!Content/ProjectWildfire/*
+!Content/WildfireContent/*
 .idea/*
 **/*/desktop.ini
-
-!*/WildfireContent
 
 # Visual Studio 2015 user specific files
 .vs/
