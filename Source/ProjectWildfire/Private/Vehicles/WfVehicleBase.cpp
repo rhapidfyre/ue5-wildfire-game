@@ -6,9 +6,12 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Camera/CameraComponent.h"
+#include "Characters/WfCharacterBase.h"
 #include "Components/InputComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "Logging/StructuredLog.h"
+#include "Net/UnrealNetwork.h"
 
 
 AWfVehicleBase::AWfVehicleBase()
@@ -37,11 +40,20 @@ AWfVehicleBase::AWfVehicleBase()
     SteeringConfig.SteeringCurve.GetRichCurve()->AddKey(0.f, 1.f);
     SteeringConfig.SteeringCurve.GetRichCurve()->AddKey(40.f, 0.7f);
     SteeringConfig.SteeringCurve.GetRichCurve()->AddKey(120.f, 0.6f);
+
 }
 
 void AWfVehicleBase::BeginPlay()
 {
     Super::BeginPlay();
+}
+
+void AWfVehicleBase::OnConstruction(const FTransform& Transform)
+{
+    Super::OnConstruction(Transform);
+    VehicleSeats.Empty(NumberOfSeats);
+    for (int i = 0; i < NumberOfSeats; ++i)
+        VehicleSeats.Add( FVehicleSeat(i) );
 }
 
 void AWfVehicleBase::SetupMappingContexts()
@@ -56,6 +68,12 @@ void AWfVehicleBase::SetupMappingContexts()
             MyInputSubsystem->AddMappingContext(VehicleInputMappingContext, 1);
         }
     }
+}
+
+void AWfVehicleBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+    DOREPLIFETIME(AWfVehicleBase, VehicleSeats);
 }
 
 void AWfVehicleBase::Tick(float DeltaTime)
@@ -91,6 +109,40 @@ void AWfVehicleBase::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
     }
 }
 
+void AWfVehicleBase::SetSeatOccupant(const int SeatNumber, AWfCharacterBase* SeatCharacter)
+{
+    for (auto& VehicleSeat : VehicleSeats)
+    {
+        if (VehicleSeat.SeatNumber == SeatNumber)
+        {
+            if (IsValid(VehicleSeat.SeatOccupant) && IsValid(SeatCharacter))
+            {
+                FString OldOccupantName = IsValid(VehicleSeat.SeatOccupant) ? VehicleSeat.SeatOccupant->GetCharacterName() : "(nobody)";
+                UE_LOGFMT(LogTemp, Error, "{ThisName}({NetMode}): Seat #{SeatNumber} is already occupied by {OccupantName}"
+                    , GetName(), HasAuthority() ? "SRV" : "CLI", SeatNumber, OldOccupantName);
+                return;
+            }
+            FString NewOccupantName = IsValid(SeatCharacter) ? SeatCharacter->GetCharacterName() : "(nobody)";
+            UE_LOGFMT(LogTemp, Display, "{ThisName}({NetMode}): Seat #{SeatNumber} is now occupied by {OccupantName}"
+                , GetName(), HasAuthority() ? "SRV" : "CLI", SeatNumber, NewOccupantName);
+            VehicleSeats[SeatNumber].SeatOccupant = SeatCharacter;
+            return;
+        }
+    }
+}
+
+AWfCharacterBase* AWfVehicleBase::GetSeatOccupant(const int SeatNumber) const
+{
+    for (auto& VehicleSeat : VehicleSeats)
+    {
+        if (VehicleSeat.SeatNumber == SeatNumber)
+        {
+            return VehicleSeat.SeatOccupant;
+        }
+    }
+    return nullptr;
+}
+
 void AWfVehicleBase::MoveForward(const FInputActionValue& Value)
 {
     float ForwardValue = Value.Get<float>();
@@ -111,4 +163,19 @@ void AWfVehicleBase::OnHandbrakePressed()
 void AWfVehicleBase::OnHandbrakeReleased()
 {
     GetVehicleMovementComponent()->SetHandbrakeInput(false);
+}
+
+void AWfVehicleBase::OnRep_VehicleSeatsUpdated_Implementation(const TArray<FVehicleSeat>& OldSeats)
+{
+    if (OnSeatOccupantChanged.IsBound())
+    {
+        for (int i = 0; i < NumberOfSeats; ++i)
+        {
+            if (OldSeats[i].SeatOccupant != VehicleSeats[i].SeatOccupant)
+            {
+                OnSeatOccupantChanged.Broadcast(
+                    OldSeats[i].SeatOccupant, VehicleSeats[i].SeatOccupant, i);
+            }
+        }
+    }
 }
