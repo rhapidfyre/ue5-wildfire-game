@@ -4,11 +4,27 @@
 
 #include "CoreMinimal.h"
 #include "Components/BoxComponent.h"
+#include "Components/SplineComponent.h"
 #include "GameFramework/Actor.h"
 #include "WfFireStationBase.generated.h"
 
+class AWfPlayerStateBase;
 class AWfFfCharacterBase;
 class AWfVehicleBase;
+
+UCLASS(BlueprintType, Blueprintable)
+class UParkingSpotComponent : public USceneComponent
+{
+	GENERATED_BODY()
+
+public:
+
+	UParkingSpotComponent();
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Fire Station Management")
+	AWfVehicleBase* AssignedVehicle;
+
+};
 
 /**
  * \brief Defines the base class of a fire station
@@ -22,8 +38,11 @@ public:
 
 	AWfFireStationBase();
 
-	void SetFireStationOwner(const APlayerController* PlayerController);
-	const FString& GetFireStationOwner() const { return FireStationOwner; }
+	UFUNCTION(BlueprintPure)
+	TArray<UParkingSpotComponent*> GetParkingSpots() const { return ParkingSpots; }
+
+	UFUNCTION(BlueprintPure)
+	UParkingSpotComponent* GetParkingSpot(const int ParkingSpotNumber) const;
 
 protected:
 
@@ -44,6 +63,12 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Fire Station")
 	USceneComponent* SpawnPoint;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Fire Station")
+	TArray<UParkingSpotComponent*> ParkingSpots;
+
+	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadWrite, Category = "Fire Station Settings")
+	int FireStationNumber;
+
 private:
 
 	UFUNCTION()
@@ -57,11 +82,4 @@ private:
 	UFUNCTION()
 	void OnOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
 					  UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
-
-	UFUNCTION(NetMulticast, Reliable)
-	void OnRep_FireStationOwner(const FString& OldOwner);
-
-
-	UPROPERTY(ReplicatedUsing=OnRep_FireStationOwner)
-	FString FireStationOwner;
 };

@@ -5,21 +5,43 @@
 
 #include "AIController.h"
 #include "Actors/WfFireStationBase.h"
-#include "Characters/WfCharacterTags.h"
 #include "Kismet/GameplayStatics.h"
+#include "Lib/WfGlobalConstants.h"
 #include "Logging/StructuredLog.h"
+#include "Messages/WfErrorMessages.h"
 #include "Net/UnrealNetwork.h"
-#include "Saves/WfPlayerSave.h"
 #include "Statics/WfGameInstanceBase.h"
 #include "Statics/WfGameModeBase.h"
 #include "Statics/WfGameStateBase.h"
 #include "Statics/WfGlobalTags.h"
+#include "Vehicles/WfFireApparatusBase.h"
+
+
+FFirefighterAssignment::FFirefighterAssignment()
+	: AssignedVehicle(nullptr), CharacterReference(nullptr)
+{
+}
+
+FFireApparatusFleet::FFireApparatusFleet()
+	: VehicleReference(nullptr), FireStationBase(nullptr)
+{
+}
+
+FFleetPurchaseData::FFleetPurchaseData()
+	: PurchaseValue(0.0f)
+{
+}
 
 AWfPlayerStateBase::AWfPlayerStateBase()
 	: FireStationBase(nullptr),
 	  GameModeBase(nullptr),
 	  Resources({})
 {
+}
+
+void AWfPlayerStateBase::Server_SetFireStation_Implementation(AWfFireStationBase* FireStation)
+{
+	SetFireStationReference(FireStation);
 }
 
 void AWfPlayerStateBase::SetResourceValue(const FGameplayTag& ResourceTag, const float NewValue)
@@ -35,6 +57,17 @@ void AWfPlayerStateBase::SetResourceValue(const FGameplayTag& ResourceTag, const
 				"PlayerState({NetMode}): Resource '{ResourceTag}' Updated ({OldValue} -> {NewValue})",
 				HasAuthority() ? "SRV" : "CLI", ResourceTag.ToString(), OldValue, NewValue);
 		}
+	}
+}
+
+void AWfPlayerStateBase::OnRep_FireStation_Implementation()
+{
+	UE_LOGFMT(LogTemp, Display, "{PlayerState}({NetMode}) is {NowNoLonger}{FireStationName}"
+		, GetName(), HasAuthority() ? "SRV" : "CLI", IsValid(FireStationBase) ? "now the owner of" : "no longer commanding a fire station"
+		, IsValid(FireStationBase) ? (" " + FireStationBase->GetName()) : ".");
+	if (OnFireStationChanged.IsBound())
+	{
+		OnFireStationChanged.Broadcast(FireStationBase, IsValid(FireStationBase));
 	}
 }
 
@@ -104,29 +137,130 @@ float AWfPlayerStateBase::GetResourceValue(const FGameplayTag& ResourceTag) cons
 	return 0.0f;
 }
 
-AWfFireStationBase* AWfPlayerStateBase::GetFireStationReference()
+AWfFireStationBase* AWfPlayerStateBase::GetFireStationReference() const
 {
-	if (!IsValid(FireStationBase))
+	return FireStationBase;
+}
+
+void AWfPlayerStateBase::PurchaseFireApparatus(const FFleetPurchaseData& PurchaseData)
+{
+	if (PurchaseData.FireApparatusType)
 	{
-		TArray<AActor*> FireStations;
-		UGameplayStatics::GetAllActorsOfClass(GetWorld(), AWfFireStationBase::StaticClass(), FireStations);
-		for (const auto& StationActor : FireStations)
+		if (!HasAuthority())
 		{
-			AWfFireStationBase* FireStation = Cast<AWfFireStationBase>(StationActor);
-			if (FireStation->GetOwner() == this)
+			Server_PurchaseFireApparatus(PurchaseData);
+			return;
+		}
+
+		if (!IsValid(FireStationBase))
+		{
+			UE_LOGFMT(LogTemp, Error, "PlayerState({NetMode}): No Valid Fire Station"
+				, HasAuthority() ? "SRV" : "CLI");
+			return;
+		}
+
+		// Determine the fire station's available parking spots
+		FTransform NewTransform(FVector(0.0f));
+		if (IsValid(FireStationBase))
+		{
+			UParkingSpotComponent* ParkingSpot = nullptr;
+			for (const auto& ParkSpot : FireStationBase->GetParkingSpots())
 			{
-				FireStationBase = FireStation;
+				if (!IsValid(ParkSpot->AssignedVehicle))
+				{
+					ParkingSpot = ParkSpot;
+					break;
+				}
+			}
+			if (!IsValid(ParkingSpot))
+			{
+				UE_LOGFMT(LogTemp, Error, "PlayerState({NetMode}): No Parking Spots Available", HasAuthority() ? "SRV" : "CLI");
+				Client_PurchaseError(WfError::GError_No_Park_Spots);
+				if (OnFireApparatusPurchaseFail.IsBound())
+					OnFireApparatusPurchaseFail.Broadcast(WfError::GError_No_Park_Spots);
+				return;
+			}
+
+			NewTransform.SetLocation(ParkingSpot->GetComponentLocation());
+			NewTransform.SetRotation(ParkingSpot->GetComponentQuat());
+		}
+
+		FFireApparatusFleet NewFleetData;
+		NewFleetData.VehicleReference = GetWorld()->SpawnActorDeferred<AWfFireApparatusBase>
+			(PurchaseData.FireApparatusType->StaticClass(), NewTransform, this);
+
+		NewFleetData.VehicleReference->FinishSpawning(NewTransform);
+
+	}
+}
+
+void AWfPlayerStateBase::SetAssignedApparatus(AWfFfCharacterBase* FireCharacter, AWfFireApparatusBase* FireApparatus)
+{
+	if (!IsValid(FireCharacter))
+		return;
+
+	FFirefighterAssignment* AssignmentData = nullptr;
+	int numPersonnel = 0;
+	for (auto& FireFighter : PersonnelData)
+	{
+		if (IsValid(FireFighter.AssignedVehicle) && IsValid(FireFighter.CharacterReference))
+		{
+			if (FireFighter.AssignedVehicle == FireApparatus)
+			{
+				numPersonnel++;
 			}
 		}
+		if (FireFighter.CharacterReference == FireCharacter)
+		{
+			// If nullifying the fire apparatus, set it to null and return.
+			if (!IsValid(FireApparatus))
+			{
+				AssignmentData->AssignedVehicle = nullptr;
+				return;
+			}
+
+			// Otherwise, grab this struct and modify it
+			AssignmentData = &FireFighter;
+		}
 	}
-	return FireStationBase;
+
+	if (numPersonnel > FireApparatus->NumberOfSeats)
+	{
+		UE_LOGFMT(LogTemp, Error, "PlayerState({NetMode}): Can't assign vehicle '{NewVehicle}'. Max Occupants Reached."
+			, HasAuthority() ? "SRV" : "CLI", FireApparatus->GetName());
+		return;
+	}
+
+	if (AssignmentData)
+		AssignmentData->AssignedVehicle = FireApparatus;
+	else
+	{
+		FFirefighterAssignment NewAssignment;
+		NewAssignment.AssignedVehicle = FireApparatus;
+		NewAssignment.CharacterReference = FireCharacter;
+		PersonnelData.Add(NewAssignment);
+	}
 }
 
 void AWfPlayerStateBase::SetFireStationReference(AWfFireStationBase* FireStation)
 {
-	if (IsValid(FireStation))
+	if (HasAuthority())
 	{
-		FireStationBase = FireStation;
+		if (IsValid(FireStation))
+		{
+			FireStationBase = FireStation;
+			UE_LOGFMT(LogTemp, Display, "{PlayerState}({NetMode}) is {NowNoLonger}{FireStationName}"
+				, GetName(), HasAuthority() ? "SRV" : "CLI", IsValid(FireStationBase) ? "now the owner of" : "no longer commanding a fire station"
+				, IsValid(FireStation) ? (" " + FireStation->GetName()) : ".");
+			if (OnFireStationChanged.IsBound())
+			{
+				OnFireStationChanged.Broadcast(FireStationBase, IsValid(FireStationBase));
+			}
+		}
+	}
+	else if (IsValid(FireStation))
+	{
+		Server_SetFireStation(FireStation);
 	}
 }
 
@@ -152,13 +286,13 @@ AWfFfCharacterBase* AWfPlayerStateBase::AcceptJobContract(const FJobContractData
 		AWfFfCharacterBase* NewFirefighter = GetWorld()->SpawnActorDeferred<AWfFfCharacterBase>
 			(AWfFfCharacterBase::StaticClass(), NewTransform);
 
+		NewFirefighter->SetOwner( GetPlayerController() );
 		NewFirefighter->SetJobContract(JobContract.ContractId, JobContract.UserIndex);
 		NewFirefighter->SetCharacterRole(JobContract.CharacterRole);
 		NewFirefighter->SetCharacterRace(JobContract.CharacterRace);
 		NewFirefighter->SetCharacterAge(JobContract.CharacterAge);
 		NewFirefighter->SetCharacterGender(JobContract.CharacterGender);
 		NewFirefighter->SetHourlyRate(JobContract.HourlyRate);
-
 
 		NewFirefighter->SetCharacterName(
 			{JobContract.CharacterNameFirst, JobContract.CharacterNameMiddle, JobContract.CharacterNameLast});
@@ -172,7 +306,10 @@ AWfFfCharacterBase* AWfPlayerStateBase::AcceptJobContract(const FJobContractData
 
 		RemoveMoney(PaycheckCost);
 
-		AllPersonnel.Add(NewFirefighter);
+		FFirefighterAssignment NewAssignment;
+		NewAssignment.CharacterReference = NewFirefighter;
+		PersonnelData.Add(NewAssignment);;
+
 		if (OnFirefighterHired.IsBound())
 			OnFirefighterHired.Broadcast(NewFirefighter);
 
@@ -253,6 +390,11 @@ void AWfPlayerStateBase::BeginPlay()
 	}
 }
 
+void AWfPlayerStateBase::Server_PurchaseFireApparatus_Implementation(const FFleetPurchaseData& PurchaseData)
+{
+	PurchaseFireApparatus(PurchaseData);
+}
+
 void AWfPlayerStateBase::HourlyTick(const FDateTime& NewDateTime)
 {
 	UE_LOGFMT(LogTemp, Display, "HourlyTick()");
@@ -299,5 +441,16 @@ void AWfPlayerStateBase::SetupInitialResourceValues()
 void AWfPlayerStateBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-	DOREPLIFETIME_CONDITION(AWfPlayerStateBase, AllPersonnel, COND_OwnerOnly);
+
+	DOREPLIFETIME(AWfPlayerStateBase, FireStationBase);
+
+	DOREPLIFETIME_CONDITION(AWfPlayerStateBase, PersonnelData, COND_OwnerOnly);
+}
+
+void AWfPlayerStateBase::Client_PurchaseError_Implementation(const FText& ErrorReason)
+{
+	if (OnFireApparatusPurchaseFail.IsBound())
+	{
+		OnFireApparatusPurchaseFail.Broadcast(ErrorReason);
+	}
 }

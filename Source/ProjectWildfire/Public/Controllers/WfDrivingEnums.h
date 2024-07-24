@@ -8,29 +8,46 @@ UENUM(BlueprintType)
 enum class EAiDrivingBehavior : uint8
 {
 	// Driver just drives aimlessly, abiding by all laws
-	None = 0		UMETA(DisplayName = "Basic Driver"),
+	None = 0		UMETA(DisplayName = "Casual Drive"),
 
 	// Driver rolls stop signs, accelerating quickly, braking last second
-	Rushed			UMETA(DisplayName = "Late for Task"),
+	Rushed			UMETA(DisplayName = "Late for Work"),
 
 	// Drives within legal limits but is slow to react (cell phone)
-	Distracted		UMETA(DisplayName = "Distracted Driver"),
+	Distracted		UMETA(DisplayName = "Distracted"),
 
 	// Slow reactions, tailgating
-	Intoxicated		UMETA(DisplayName = "Intoxicated Driver"),
+	Intoxicated		UMETA(DisplayName = "Intoxicated"),
 
 	// Abides by all laws, with perfect reaction times
-	Professional	UMETA(DisplayName = "Professional Driver")
+	Professional	UMETA(DisplayName = "Professional")
 };
 
 UENUM(BlueprintType)
-enum class EAiDrivingMethod : uint8
+enum class EResponseCode : uint8
 {
-	None = 0		UMETA(DisplayName = "Basic"),
+	// Don't drive, avoid vehicles.
+	None = 0		UMETA(DisplayName = "No Change"),
 
-	// Driver rolls stop signs, accelerating quickly, braking last second
-	Urgent			UMETA(DisplayName = "Late for Task"),
+	// Drive casually as part of normal traffic
+	One				UMETA(DisplayName = "Drive Casually"),
 
-	// Drives within legal limits but is slow to react (cell phone)
-	Emergency		UMETA(DisplayName = "Distracted Driver")
+	// Disregard basic laws to get to goal quicker
+	Two				UMETA(DisplayName = "Drive With Urgency"),
+
+	// Drive with lights and sirens to goal as fast as possible
+	Three			UMETA(DisplayName = "Emergency Operations"),
+};
+
+UENUM(BlueprintType)
+enum class EAiDrivingState : uint8
+{
+	// Don't drive, avoid vehicles.
+	None = 0		UMETA(DisplayName = "Avoid Vehicle Use"),
+
+	// Get in the vehicle and then drive to the goal destination
+	Casual			UMETA(DisplayName = "Drive Without a Goal"),
+
+	// Use the vehicle and then drive to the goal destination
+	Goal			UMETA(DisplayName = "Drive Towards Goal"),
 };

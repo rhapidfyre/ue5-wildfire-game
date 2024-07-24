@@ -21,6 +21,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnJobContractExpired, const FJobCon
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnTemperatureChanged, const float, TempAtSurface, const float, TempAtAltitude);
 
+
 /**
  *
  */
@@ -42,6 +43,10 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Game Mode Control")
 	void ForceUpdate();
+
+	UDataTable* GetMessageTable() const { return MessageTable; }
+
+	int GetNextFireStationNumber() const;
 
 	UFUNCTION(BlueprintPure, Category = "Weather Conditions")
 	float GetTemperatureSurface(const bool bUseCelsius) const;
@@ -160,6 +165,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character Data")
 	UDataTable* LastNamesTable;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Game Data")
+	UDataTable* MessageTable;
 
 	// Allows overriding the starting date and time of the game
 	// If set to zero (epoch start), it will use the current UTC time and date.

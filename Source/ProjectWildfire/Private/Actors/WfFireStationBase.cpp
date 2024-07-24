@@ -8,8 +8,13 @@
 #include "Kismet/GameplayStatics.h"
 #include "Logging/StructuredLog.h"
 #include "Net/UnrealNetwork.h"
-#include "Statics/WfPlayerStateBase.h"
+#include "Statics/WfGameModeBase.h"
 
+
+UParkingSpotComponent::UParkingSpotComponent()
+	: AssignedVehicle(nullptr)
+{
+}
 
 // Sets default values
 AWfFireStationBase::AWfFireStationBase()
@@ -32,31 +37,23 @@ AWfFireStationBase::AWfFireStationBase()
 
 	SpawnPoint = CreateDefaultSubobject<USceneComponent>("SpawnPoint");
 	SpawnPoint->SetupAttachment(BoundaryBox);
+
+	// Sets up one default parking spot by default
+	ParkingSpots.Empty();
+	UParkingSpotComponent* DefaultParkingSpot = CreateDefaultSubobject<UParkingSpotComponent>("ParkingSpot_01");
+	DefaultParkingSpot->SetupAttachment(GetRootComponent());
+	DefaultParkingSpot->SetWorldLocation(SpawnPoint->GetComponentLocation());
+	DefaultParkingSpot->SetWorldRotation(SpawnPoint->GetComponentRotation());
+	ParkingSpots.Add(DefaultParkingSpot);
 }
 
-void AWfFireStationBase::SetFireStationOwner(const APlayerController* PlayerController)
+UParkingSpotComponent* AWfFireStationBase::GetParkingSpot(const int ParkingSpotNumber) const
 {
-	if (!HasAuthority())
+	if (ParkingSpots.IsValidIndex(ParkingSpotNumber))
 	{
-		UE_LOGFMT(LogCore, Error, "SetFireStationOwner(): Authority Violation (Exe from Client)");
-		return;
+		return ParkingSpots[ParkingSpotNumber];
 	}
-	if (!IsValid(PlayerController))
-	{
-		UE_LOGFMT(LogTemp, Display, "SetFireStationOwner(): Received invalid APlayerController*");
-		return;
-	}
-
-	const AWfPlayerStateBase* PlayerState =
-		Cast<AWfPlayerStateBase>(PlayerController->GetPlayerState<APlayerState>());
-	if (!IsValid(PlayerState))
-	{
-		UE_LOG(LogTemp, Warning, TEXT("PlayerState is Invalid."));
-		return;
-	}
-	const TSharedPtr<const FUniqueNetId> UniqueNetId = PlayerState->GetUniqueId().GetUniqueNetId();
-	FireStationOwner = UniqueNetId->ToString();
-	UE_LOGFMT(LogTemp, Display, "SetFireStationOwner(): New Owner = {NewOwner}", FireStationOwner);
+	return nullptr;
 }
 
 // Called when the game starts or when spawned
@@ -77,12 +74,23 @@ void AWfFireStationBase::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
 	BoundaryBox->UpdateOverlaps(); // Update overlaps when the size changes
+
+	if (FireStationNumber < 1)
+	{
+		if (AGameModeBase* GameModeBase = GetWorld()->GetAuthGameMode())
+		{
+			if (AWfGameModeBase* WfGameMode = Cast<AWfGameModeBase>(GameModeBase))
+			{
+				FireStationNumber = WfGameMode->GetNextFireStationNumber();
+			}
+		}
+	}
 }
 
 void AWfFireStationBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-	DOREPLIFETIME_CONDITION(AWfFireStationBase, FireStationOwner, COND_None);
+	DOREPLIFETIME(AWfFireStationBase, FireStationNumber);
 }
 
 // Called every frame
@@ -133,9 +141,4 @@ void AWfFireStationBase::OnOverlapEnd(UPrimitiveComponent* OverlappedComp, AActo
     		FireStationInterface->EventEndOverlap(this);
     	}
     }
-}
-
-void AWfFireStationBase::OnRep_FireStationOwner_Implementation(const FString& OldOwner)
-{
-	// TODO - Implement owner change logic
 }

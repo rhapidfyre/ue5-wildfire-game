@@ -11,7 +11,10 @@
 
 #include "WfFfCharacterBase.generated.h"
 
+class AWfFireApparatusBase;
+class AWfFireStationBase;
 class UWfScheduleComponent;
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnHourlyRateChanged,
                                              const float&, OldHourlyRate, const float&, NewHourlyRate);
 
@@ -55,6 +58,13 @@ public:
 
 	virtual void NewCharacter(const FGameplayTag& NewPrimaryRole) override;
 
+	UFUNCTION(BlueprintPure)
+	bool IsInQuarters() const { return bInQuarters; }
+
+	UFUNCTION(BlueprintPure)
+	bool CanDriveApparatus() const;
+
+
 protected:
 
 	virtual void BeginPlay() override;
@@ -73,6 +83,7 @@ public:
 	UWfScheduleComponent* ScheduleComponent;
 
 private:
+
 	UPROPERTY(Replicated) bool bInQuarters;
 
 	UPROPERTY(Replicated) int YearsOfService;

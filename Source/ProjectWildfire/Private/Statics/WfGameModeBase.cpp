@@ -3,6 +3,7 @@
 
 #include "ProjectWildfire/Public/Statics/WfGameModeBase.h"
 
+#include "Actors/WfFireStationBase.h"
 #include "Characters/WfCharacterTags.h"
 #include "Characters/WfCharacterData.h"
 #include "Kismet/GameplayStatics.h"
@@ -30,6 +31,7 @@ FString GenerateRandomString(int32 Length)
 AWfGameModeBase::AWfGameModeBase()
     : FirstNamesTable(nullptr)
     ,  LastNamesTable(nullptr)
+    ,  MessageTable(nullptr)
     ,  bUseSeasons(false)
     ,  bUseMetricSystem(false)
     ,  TemperatureSurface(24.0f)
@@ -58,6 +60,29 @@ void AWfGameModeBase::ForceUpdate()
     DetermineDroughtFactor();
     DetermineRelativeHumidity();
     DetermineWindSpeed();
+}
+
+int AWfGameModeBase::GetNextFireStationNumber() const
+{
+    TArray<AActor*> OutActors;
+    UGameplayStatics::GetAllActorsOfClass(GetWorld(), AWfFireStationBase::StaticClass(), OutActors);
+
+    TSet<int32> NumbersTaken;
+    for (const auto& StationActor : OutActors)
+    {
+        if (AWfFireStationBase* FireStation = Cast<AWfFireStationBase>(StationActor))
+        {
+            NumbersTaken.Add(FireStation->FireStationNumber);
+        }
+    }
+
+    for (int32 i = 1; ; ++i)
+    {
+        if (!NumbersTaken.Contains(i))
+        {
+            return i;
+        }
+    }
 }
 
 // Returns the current surface temperature

@@ -94,9 +94,9 @@ void AWfPlayerState::BeginPlay()
 
 			if (IsValid(NewPlayerSave))
 			{
-				for (const auto& PersonnelData : AllPersonnel)
+				for (const auto& FireFighter : PersonnelData)
 				{
-					NewPlayerSave->SavedPersonnel.Add(PersonnelData->GetFirefighterJobContract());
+					NewPlayerSave->SavedPersonnel.Add(FireFighter.CharacterReference->GetFirefighterJobContract());
 				}
 				UGameplayStatics::SaveGameToSlot(NewPlayerSave, SaveSlotName, SaveUserIndex);
 			}

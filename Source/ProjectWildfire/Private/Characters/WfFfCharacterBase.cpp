@@ -6,12 +6,12 @@
 #include "Characters/WfCharacterTags.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/WfScheduleComponent.h"
-#include "Gas/WfFfAttributeSet.h"
 #include "Logging/StructuredLog.h"
 #include "Net/UnrealNetwork.h"
 #include "Saves/WfCharacterSaveGame.h"
 #include "Statics/WfGameInstanceBase.h"
 #include "Statics/WfGameStateBase.h"
+#include "Vehicles/WfFireApparatusBase.h"
 
 
 AWfFfCharacterBase::AWfFfCharacterBase()
@@ -79,6 +79,17 @@ void AWfFfCharacterBase::EventEndOverlap(AActor* OverlappedActor)
 bool AWfFfCharacterBase::IsEligible()
 {
 	return IWfFireStationInterface::IsEligible();
+}
+
+bool AWfFfCharacterBase::CanDriveApparatus() const
+{
+	const FGameplayTag ThisRole = GetCharacterRole();
+	if (ThisRole == TAG_Role_Fire_Eng.GetTag())   return true;
+	if (ThisRole == TAG_Role_Fire_Chief.GetTag()) return true;
+	if (ThisRole == TAG_Role_Fire_Cpt.GetTag())   return true;
+	if (ThisRole == TAG_Role_Fire_Arson.GetTag()) return true;
+	if (ThisRole == TAG_Role_Fire_Div.GetTag())   return true;
+	return false;
 }
 
 void AWfFfCharacterBase::BeginPlay()

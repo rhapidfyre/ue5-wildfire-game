@@ -16,6 +16,7 @@ class AAIController;
 class AWfGameModeBase;
 class AWfFireStationBase;
 class UWfFirefighterSaveGame;
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(
 	FOnResourceUpdated, const FGameplayTag&, ResourceTag, const float, OldValue, const float, NewValue);
 
@@ -27,6 +28,68 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	FOnFirefighterDeath, const AWfFfCharacterBase*, ActorFirefighter);
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
+	FOnFireApparatusPurchaseFail, const FText&, FailureReason);
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
+	FOnFireApparatusPurchase, const AWfFireApparatusBase*, NewFireApparatus);
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
+	FOnFireApparatusDestroyed, const AWfFireApparatusBase*, NewFireApparatus);
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
+	FOnFireStationChanged, const AWfFireStationBase*, NewFireStation, const bool, bIsOwned);
+
+
+USTRUCT(BlueprintType)
+struct PROJECTWILDFIRE_API FFirefighterAssignment
+{
+	GENERATED_BODY()
+
+	FFirefighterAssignment();
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Firefighter Assignment")
+	AWfFireApparatusBase* AssignedVehicle;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Firefighter Assignment")
+	AWfFfCharacterBase* CharacterReference;
+
+};
+
+
+USTRUCT(BlueprintType)
+struct PROJECTWILDFIRE_API FFireApparatusFleet
+{
+	GENERATED_BODY()
+
+	FFireApparatusFleet();
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Fleet")
+	AWfFireApparatusBase* VehicleReference;
+
+	// Which fire station the apparatus is assigned to
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Fleet")
+	AWfFireStationBase* FireStationBase;
+
+};
+
+
+USTRUCT(BlueprintType)
+struct PROJECTWILDFIRE_API FFleetPurchaseData
+{
+	GENERATED_BODY()
+
+	FFleetPurchaseData();
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Purchase Data")
+	TSubclassOf<AWfFireApparatusBase> FireApparatusType;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Purchase Data")
+	float PurchaseValue;
+
+};
+
 
 /**
  *	Includes all logic necessary for the player state to function in this custom game
@@ -45,17 +108,26 @@ public:
 
 	UFUNCTION(BlueprintCallable)
 	AWfFfCharacterBase* AcceptJobContract(
-	const FJobContractData& JobContract, FString& FailureContext);
+		const FJobContractData& JobContract, FString& FailureContext);
 
 
 	UFUNCTION(BlueprintPure)
 	FGameplayTagContainer GetAllResourceTags() const;
 
 	UFUNCTION(BlueprintPure)
-	TArray<AWfFfCharacterBase*> GetAllPersonnel() const { return AllPersonnel; }
+	TArray<FFirefighterAssignment> GetAllPersonnel() const { return PersonnelData; }
 
-	UFUNCTION()
-	AWfFireStationBase* GetFireStationReference();
+	UFUNCTION(BlueprintPure)
+	TArray<FFireApparatusFleet> GetVehicleFleetData() const { return FleetData; }
+
+	UFUNCTION(BlueprintPure)
+	AWfFireStationBase* GetFireStationReference() const;
+
+	UFUNCTION(BlueprintCallable)
+	void PurchaseFireApparatus(const FFleetPurchaseData& PurchaseData);
+
+	UFUNCTION(BlueprintCallable)
+	void SetAssignedApparatus(AWfFfCharacterBase* FireCharacter, AWfFireApparatusBase* FireApparatus);
 
 	UFUNCTION(BlueprintPure)
 	float GetMoney() const;
@@ -73,7 +145,7 @@ public:
 	float GetResourceValue(const FGameplayTag& ResourceTag) const;
 
 
-	UFUNCTION()
+	UFUNCTION(BlueprintCallable)
 	void SetFireStationReference(AWfFireStationBase* FireStation);
 
 
@@ -111,6 +183,9 @@ protected:
 	UFUNCTION(Server, Reliable)
 	void Server_AcceptContract(const FJobContractData& JobContract);
 
+	UFUNCTION(Server, Reliable)
+	void Server_PurchaseFireApparatus(const FFleetPurchaseData& PurchaseData);
+
 	UFUNCTION() void HourlyTick(const FDateTime& NewDateTime);
 
 	virtual void SetupInitialResourceValues();
@@ -118,11 +193,20 @@ protected:
 	virtual void GetLifetimeReplicatedProps(
 		TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
+	UFUNCTION(Client, Reliable, BlueprintCallable)
+	void Client_PurchaseError(const FText& ErrorReason);
+
+
+	UFUNCTION(Server, Reliable, BlueprintCallable)
+	void Server_SetFireStation(AWfFireStationBase* FireStation);
+
 private:
 
 	UFUNCTION(BlueprintCallable)
 	void SetResourceValue(const FGameplayTag& ResourceTag, const float NewValue = 0.0f);
 
+	UFUNCTION(NetMulticast, Reliable)
+	void OnRep_FireStation();
 
 	UFUNCTION(NetMulticast, Reliable)
 	void Multicast_FirefighterHired(const AWfFfCharacterBase* NewFirefighter);
@@ -160,17 +244,32 @@ public:
 	UPROPERTY(BlueprintAssignable)
 	FOnFirefighterDeath OnFirefighterDeath;
 
+	UPROPERTY(BlueprintAssignable)
+	FOnFireStationChanged OnFireStationChanged;
+
+	UPROPERTY(BlueprintAssignable)
+	FOnFireApparatusPurchase OnFireApparatusPurchase;
+
+	UPROPERTY(BlueprintAssignable)
+	FOnFireApparatusDestroyed OnFireApparatusDestroyed;
+
+	UPROPERTY(BlueprintAssignable)
+	FOnFireApparatusPurchaseFail OnFireApparatusPurchaseFail;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Actor Settings")
 	TSubclassOf<AAIController> UsingAiController;
 
 protected:
 
-	UPROPERTY(Replicated)
-	TArray<AWfFfCharacterBase*> AllPersonnel;
+	// All hired firefighters belonging to the player
+	UPROPERTY(Replicated) TArray<FFirefighterAssignment> PersonnelData;
+
+	// All fire apparatus owned by the player
+	UPROPERTY(Replicated) TArray<FFireApparatusFleet>	 FleetData;
 
 private:
 
-	UPROPERTY()
+	UPROPERTY(ReplicatedUsing=OnRep_FireStation)
 	AWfFireStationBase* FireStationBase;
 
 	UPROPERTY()
