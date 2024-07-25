@@ -7,4 +7,5 @@
 namespace WfError
 {
 	extern const FText GError_No_Park_Spots;
+	extern const FText GError_Not_Enough_Money;
 }

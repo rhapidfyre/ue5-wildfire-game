@@ -9,6 +9,7 @@
 
 #include "WfVehicleBase.generated.h"
 
+class UChaosVehicleWheel;
 class AWfCharacterBase;
 class UInputComponent;
 class USpringArmComponent;
@@ -53,7 +54,13 @@ public:
 	USpringArmComponent* SpringArm;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Actor Components")
-    UCameraComponent* Camera;
+	UCameraComponent* Camera;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Actor Components")
+	TSubclassOf<UChaosVehicleWheel> ConfigFrontWheels;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Actor Components")
+	TSubclassOf<UChaosVehicleWheel> ConfigRearWheels;
 
 	UPROPERTY(BlueprintAssignable) FOnSeatOccupantChanged OnSeatOccupantChanged;
 

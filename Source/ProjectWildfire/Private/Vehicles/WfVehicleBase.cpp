@@ -51,9 +51,13 @@ void AWfVehicleBase::BeginPlay()
 void AWfVehicleBase::OnConstruction(const FTransform& Transform)
 {
     Super::OnConstruction(Transform);
+
     VehicleSeats.Empty(NumberOfSeats);
     for (int i = 0; i < NumberOfSeats; ++i)
+    {
         VehicleSeats.Add( FVehicleSeat(i) );
+    }
+
 }
 
 void AWfVehicleBase::SetupMappingContexts()

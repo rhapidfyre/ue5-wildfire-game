@@ -19,7 +19,8 @@ public class ProjectWildfire : ModuleRules
 	        "Niagara",
 	        "ChaosVehicles",
 	        "GameplayAbilities",
-	        "GameplayTasks"
+	        "GameplayTasks",
+	        "TextToSpeech"
         });
 
         PrivateDependencyModuleNames.AddRange(new string[] {

@@ -2,6 +2,7 @@
 https://us-east-1.console.aws.amazon.com/polly/home/SynthesizeSpeech
 Male Dispatcher: Matthew, Male (Neural)
 Female Dispatcher: Ruth, Female (Neural)
+Male Firefighter A: Stephen, Male (Neural)
 
 Call Titles & Types
 Incident Commander, IC, Unit, Sheriff, Police, Station, Company, Medic, Engine, Truck, Squad, Battalion, Division, Chief, Captain, Engineer, Firefighter, Inmate, Crew, Corrections, Copter, Prevention, Utility, Dozer, Air Tanker, Transport, Camp, Rescue, Hazmat, Support, Brush, Water Tender, Tender, Patrol, Lookout, Supply, Training, Tower, Medical, Commercial Structure Fire, Residential Structure Fire, Aircraft Down, Vegetation Fire, Smoke Check, Vehicle Fire, Other Type Fire, Traffic Collision, Lift Assist, Drowning, Difficulty Breathing, Chest Pain, Motorcycle Down, Criminal Violence, Agency Assist, Hazardous Conditions, command center, Gas Leak, Water rescue, seizure, stroke, technical rescue, fire alarm sounding, confined space rescue, vehicle roll-over, vehicle into a building, vehicle off the embankment, E V fire, vehicle into water, vehicle versus pedestrian, boating accident, industrial, residential, commercial, public assist, electrical hazard

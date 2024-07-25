@@ -25,8 +25,17 @@ public:
 
 	AWfFireApparatusBase();
 
+	UFUNCTION(BlueprintCallable)
+	void SetIdentities(
+		const int32 StationNumber, const FString& ApparatusType, const int32 UniqueNumber);
+
 	UFUNCTION(BlueprintPure) FString GetApparatusIdentity() const;
-	UFUNCTION(BlueprintCallable) void SetApparatusIdentity(FString NewIdentity);
+	UFUNCTION(BlueprintPure) int32 GetApparatusIdentityStation() const { return IdentityStation; }
+	UFUNCTION(BlueprintPure) FString GetApparatusIdentityType() const { return IdentityType; }
+	UFUNCTION(BlueprintPure) int32 GetApparatusIdentityUnique() const { return IdentityUnique; }
+
+	UFUNCTION(BlueprintCallable) void
+	SetApparatusIdentity(FString NewIdentity);
 
 	virtual void Tick(float DeltaTime) override;
 
@@ -36,16 +45,24 @@ protected:
 
 	virtual void BeginPlay() override;
 
+	virtual void GetLifetimeReplicatedProps(
+		TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
 public: // Public Members
 
 	UPROPERTY(BlueprintAssignable) FOnApparatusIdentityChanged OnApparatusIdentityChanged;
 
 private: // Private Members
 
-	// If valid, overrides the generated call signs
-	FString IdentityOverride;
+	UFUNCTION(NetMulticast, Reliable) void OnRep_IdentityOverride(const FString& OldIdentityValue);
+	UFUNCTION(NetMulticast, Reliable) void OnRep_IdentityStation(const int32 OldIdentityValue);
+	UFUNCTION(NetMulticast, Reliable) void OnRep_IdentityApparatus(const FString& OldIdentityValue);
+	UFUNCTION(NetMulticast, Reliable) void OnRep_IdentityUnique(const int32 OldIdentityValue);
 
-	int32   IdentityStation;
-	FString IdentityApparatus;
-	int32   IdentityUnique;
+	// If valid, overrides the generated call signs
+	UPROPERTY(ReplicatedUsing=OnRep_IdentityOverride)   FString IdentityOverride;
+
+	UPROPERTY(ReplicatedUsing=OnRep_IdentityStation)   int32   IdentityStation;
+	UPROPERTY(ReplicatedUsing=OnRep_IdentityApparatus) FString IdentityType;
+	UPROPERTY(ReplicatedUsing=OnRep_IdentityUnique)    int32   IdentityUnique;
 };

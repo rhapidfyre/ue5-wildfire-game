@@ -92,8 +92,8 @@ private:
 
 	UPROPERTY(Replicated) float HourlyRate;
 
-	FString ContractId;
+	UPROPERTY(Replicated) FString ContractId;
 
-	int32 ContractUserIndex;
+	UPROPERTY(Replicated) int32 ContractUserIndex;
 
 };

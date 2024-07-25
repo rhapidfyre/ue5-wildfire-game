@@ -113,7 +113,7 @@ public:
 
 	UWfSaveGame* CreateNewCharacter(const FGameplayTag& NewCharacterRole);
 
-	virtual void JobContractExpired(const FJobContractData& JobContract);
+	virtual void JobContractExpired(const FJobContractData& JobContract, bool bDeleteSave = true);
 
 protected:
 
@@ -168,6 +168,12 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Game Data")
 	UDataTable* MessageTable;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Game Data")
+	UDataTable* VoxTable;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Game Data")
+	UDataTable* CalloutsTable;
 
 	// Allows overriding the starting date and time of the game
 	// If set to zero (epoch start), it will use the current UTC time and date.

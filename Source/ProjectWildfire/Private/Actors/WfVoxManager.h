@@ -90,6 +90,12 @@ public:
 	AWfVoxManager();
 
 	UFUNCTION(BlueprintCallable)
+    static AWfVoxManager* GetInstance(UWorld* World);
+
+	UFUNCTION(BlueprintPure)
+	FVoxData GetVoxData(const FName& VoxPhrase);
+
+	UFUNCTION(BlueprintCallable)
 	void Server_SpeakSentence(
 		const TArray<FName>& VoxPhrases, bool bSpatialAudio = false, bool bNotifyDelegates = false);
 
@@ -112,16 +118,30 @@ public:
 	void Multicast_SpeakSentence(
 		const TArray<FName>& VoxPhrases, bool bSpatialAudio = false, bool bNotifyDelegates = false);
 
+	UFUNCTION(BlueprintCallable)
+	void SpeakRadio(const FString& RadioSentence);
+
+	UFUNCTION(Server, Reliable)
+	void Server_RadioCall(const TArray<FVoxData>& RadioPhrase);
+
+	UFUNCTION(NetMulticast, Unreliable)
+	void Multicast_RadioCall(const TArray<FVoxData>& RadioPhrase);
+
 protected:
 
+	// Run on clients only
 	void Speak_Internal(TArray<FVoxData> VoxAnnouncement);
 
 	virtual void BeginPlay() override;
+
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
 
 	UFUNCTION()
 	void OnAudioFinished();
+
+    void Initialize();
 
 public:
 
@@ -130,7 +150,10 @@ public:
 	UPROPERTY(BlueprintAssignable) FOnVoxAnnouncement OnVoxAnnouncement;
 	UPROPERTY(BlueprintAssignable) FOnFireTone		  OnFireTone;
 
+
 private:
+
+	static AWfVoxManager* Instance;
 
 	FTimerHandle SpeakTimer;
 

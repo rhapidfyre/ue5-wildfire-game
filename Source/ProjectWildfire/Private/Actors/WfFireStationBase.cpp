@@ -18,8 +18,11 @@ UParkingSpotComponent::UParkingSpotComponent()
 
 // Sets default values
 AWfFireStationBase::AWfFireStationBase()
+	: FireStationNumber(0)
 {
 	PrimaryActorTick.bCanEverTick = true;
+
+	SetReplicates(true);
 
 	// The boundary box for determining if something is within the Fire Station area
 	BoundaryBox = CreateDefaultSubobject<UBoxComponent>("BoundaryBox");
@@ -29,6 +32,7 @@ AWfFireStationBase::AWfFireStationBase()
 	BoundaryBox->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap); // All Pawns
 	BoundaryBox->SetCollisionResponseToChannel(ECC_GameTraceChannel2, ECR_Overlap); // WfEntities
 	BoundaryBox->SetCollisionEnabled(ECollisionEnabled::Type::QueryOnly);
+	BoundaryBox->SetIsReplicated(true);
 	BoundaryBox->SetBoxExtent(FVector(100.0f), false);
 
 	BoundaryBox->OnComponentBeginOverlap.AddDynamic(this, &AWfFireStationBase::OnOverlapBegin);
@@ -36,14 +40,16 @@ AWfFireStationBase::AWfFireStationBase()
 	SetActorEnableCollision(true);
 
 	SpawnPoint = CreateDefaultSubobject<USceneComponent>("SpawnPoint");
+	SpawnPoint->SetIsReplicated(true);
 	SpawnPoint->SetupAttachment(BoundaryBox);
 
 	// Sets up one default parking spot by default
 	ParkingSpots.Empty();
 	UParkingSpotComponent* DefaultParkingSpot = CreateDefaultSubobject<UParkingSpotComponent>("ParkingSpot_01");
-	DefaultParkingSpot->SetupAttachment(GetRootComponent());
-	DefaultParkingSpot->SetWorldLocation(SpawnPoint->GetComponentLocation());
-	DefaultParkingSpot->SetWorldRotation(SpawnPoint->GetComponentRotation());
+	DefaultParkingSpot->SetupAttachment(BoundaryBox);
+	DefaultParkingSpot->ResetRelativeTransform();
+	DefaultParkingSpot->bAutoRegister = true;
+	DefaultParkingSpot->SetIsReplicated(true);
 	ParkingSpots.Add(DefaultParkingSpot);
 }
 
@@ -54,6 +60,32 @@ UParkingSpotComponent* AWfFireStationBase::GetParkingSpot(const int ParkingSpotN
 		return ParkingSpots[ParkingSpotNumber];
 	}
 	return nullptr;
+}
+
+void AWfFireStationBase::AddParkingSpot()
+{
+	const FString ComponentName = FString::Printf(TEXT("ParkingSpot_%02d"), ParkingSpots.Num() + 1);
+	UParkingSpotComponent* NewParkingSpot = NewObject<UParkingSpotComponent>(
+		this, UParkingSpotComponent::StaticClass(), *ComponentName);
+	NewParkingSpot->SetupAttachment(BoundaryBox);
+	NewParkingSpot->ResetRelativeTransform();
+	NewParkingSpot->SetIsReplicated(true);
+	NewParkingSpot->RegisterComponent();
+}
+
+void AWfFireStationBase::DeleteParkingSpot(UParkingSpotComponent* ParkingSpot)
+{
+	if (IsValid(ParkingSpot))
+	{
+		for (auto& ParkSpot : ParkingSpots)
+		{
+			if (ParkSpot == ParkingSpot)
+			{
+				ParkSpot->DestroyComponent();
+				return;
+			}
+		}
+	}
 }
 
 // Called when the game starts or when spawned
@@ -68,23 +100,22 @@ void AWfFireStationBase::BeginPlay()
 		// Bind to the OnPlayerControllerReady delegate
 		WfPlayerController->OnActorHitBySelection.AddDynamic(this, &AWfFireStationBase::EventMouseSelect);
 	}
+
+	if (const AWfGameModeBase* WfGameMode = Cast<AWfGameModeBase>(GetWorld()->GetAuthGameMode()))
+	{
+		if (FireStationNumber < 1)
+		{
+			FireStationNumber = WfGameMode->GetNextFireStationNumber();
+			UE_LOGFMT(LogTemp, Display, "{ThisStation}({NetMode}): Fire Station Number = {StNumber}"
+				, GetName(), HasAuthority() ? "SRV" : "CLI", FireStationNumber);
+		}
+	}
 }
 
 void AWfFireStationBase::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
 	BoundaryBox->UpdateOverlaps(); // Update overlaps when the size changes
-
-	if (FireStationNumber < 1)
-	{
-		if (AGameModeBase* GameModeBase = GetWorld()->GetAuthGameMode())
-		{
-			if (AWfGameModeBase* WfGameMode = Cast<AWfGameModeBase>(GameModeBase))
-			{
-				FireStationNumber = WfGameMode->GetNextFireStationNumber();
-			}
-		}
-	}
 }
 
 void AWfFireStationBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -99,6 +130,12 @@ void AWfFireStationBase::Tick(float DeltaTime)
 	Super::Tick(DeltaTime);
 }
 
+void AWfFireStationBase::OnRep_FireStationNumber_Implementation(const int OldStationNumber)
+{
+	if (OnFireStationNumberChanged.IsBound())
+		OnFireStationNumberChanged.Broadcast(OldStationNumber, FireStationNumber);
+}
+
 /**
  * \brief Fired when a select event hit an actor that did not implement the clickable interface.
  *        We intercept this to allow fire stations to handle clicks on actors within the boundary
@@ -110,6 +147,7 @@ void AWfFireStationBase::EventMouseSelect(const FVector& ImpactPoint, bool bPrim
 {
 	if (IsValid(HitActor))
 	{
+
 	}
 }
 

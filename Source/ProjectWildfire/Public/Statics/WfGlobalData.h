@@ -82,6 +82,7 @@ struct PROJECTWILDFIRE_API FCallouts : public FTableRowBase
 
 	FCallouts();
 
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Callouts") FString DisplayName;
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Callouts") int	 AlertLevel;
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Callouts") FName VoxPhrase;
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Callouts") float Payment;

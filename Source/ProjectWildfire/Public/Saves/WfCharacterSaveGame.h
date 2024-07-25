@@ -102,10 +102,14 @@ struct PROJECTWILDFIRE_API FJobContractData
 	GENERATED_BODY()
 
 	FJobContractData()
-		: SaveReference(nullptr), ContractId("None")
-	    , CharacterAge(0), YearsOfService(0), YearsInGrade(0), HourlyRate(0)
+		: SaveReference(nullptr),
+		  ContractId("None"),
+		  UserIndex(0),
+		  CharacterAge(0),
+		  YearsOfService(0),
+		  YearsInGrade(0),
+		  HourlyRate(0)
 	{
-		UE_LOGFMT(LogTemp, Display, "JobContractOffer(): New Default Job Contract");
 	}
 
 	explicit FJobContractData(const UWfFirefighterSaveGame* SaveGamePtr)
@@ -131,7 +135,7 @@ struct PROJECTWILDFIRE_API FJobContractData
 			UE_LOGFMT(LogTemp, Display
 				, "JobContractOffer(): New Job Contract Created: '{FirstName} {MiddleName} {LastName}' ({ContractGuid})"
 				, CharacterNameFirst
-				, CharacterNameMiddle[0] + "."
+				, CharacterNameMiddle
 				, CharacterNameLast
 				, ContractId);
 		}

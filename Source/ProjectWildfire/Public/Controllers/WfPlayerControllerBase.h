@@ -62,7 +62,8 @@ public:
 
 	UFUNCTION(BlueprintPure) AActor* GetSelectedActor() const { return SelectedActor; }
 
-	virtual void SetSelectedActor(AActor* NewSelection);
+	UFUNCTION(BlueprintCallable)
+	void SetSelectedActor(AActor* NewSelection);
 
 	UFUNCTION() void ClearSelectedActor();
 

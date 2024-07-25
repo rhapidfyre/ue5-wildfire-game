@@ -62,12 +62,12 @@ void AWfGameStateBase::JobContractExpired(const FJobContractData& JobContract)
 	}
 }
 
-void AWfGameStateBase::JobContractRemove(const FJobContractData& JobContract)
+void AWfGameStateBase::JobContractRemove(const FJobContractData& JobContract, bool bDeleteSave)
 {
-	JobContractRemoveById(JobContract.ContractId);
+	JobContractRemoveById(JobContract.ContractId, bDeleteSave);
 }
 
-void AWfGameStateBase::JobContractRemoveById(const FString& ContractId)
+void AWfGameStateBase::JobContractRemoveById(const FString& ContractId, bool bDeleteSave)
 {
 	if (HiringList.Num() > 0)
 	{
@@ -78,7 +78,7 @@ void AWfGameStateBase::JobContractRemoveById(const FString& ContractId)
 				FJobContractData JobContract = HiringList[i];
 				if (JobContract.ContractId == ContractId)
 				{
-					GameModeBase->JobContractExpired(JobContract);
+					GameModeBase->JobContractExpired(JobContract, bDeleteSave);
 					return;
 				}
 			}

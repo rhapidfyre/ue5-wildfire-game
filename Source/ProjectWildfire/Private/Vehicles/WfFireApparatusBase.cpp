@@ -3,13 +3,23 @@
 
 #include "Vehicles/WfFireApparatusBase.h"
 
+#include "Net/UnrealNetwork.h"
+
 
 AWfFireApparatusBase::AWfFireApparatusBase()
 {
 	PrimaryActorTick.bCanEverTick = true;
 	IdentityStation   = 1;
-	IdentityApparatus = "Utility";
+	IdentityType = "Utility";
 	IdentityUnique    = 1;
+}
+
+void AWfFireApparatusBase::SetIdentities(const int32 StationNumber, const FString& ApparatusType,
+	const int32 UniqueNumber)
+{
+	IdentityStation = StationNumber;
+	IdentityType = ApparatusType;
+	IdentityUnique = UniqueNumber;
 }
 
 FString AWfFireApparatusBase::GetApparatusIdentity() const
@@ -20,24 +30,59 @@ FString AWfFireApparatusBase::GetApparatusIdentity() const
 	}
 
 	const FString StringSign = FString::Printf(
-		TEXT("%s %d-%02d"), *IdentityApparatus, IdentityStation, IdentityUnique);
+		TEXT("%s %d%02d"), *IdentityType, IdentityStation, IdentityUnique);
 
-	return FString(IdentityApparatus + " " + FString::FromInt(IdentityStation) + StringSign);
+	return StringSign;
 }
 
 void AWfFireApparatusBase::SetApparatusIdentity(FString NewIdentity)
 {
 	const FString OldIdentity = GetApparatusIdentity();
 	IdentityOverride = NewIdentity;
-	if (OnApparatusIdentityChanged.IsBound())
-	{
-		OnApparatusIdentityChanged.Broadcast( OldIdentity, GetApparatusIdentity() );
-	}
 }
 
 void AWfFireApparatusBase::BeginPlay()
 {
 	Super::BeginPlay();
+}
+
+void AWfFireApparatusBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(AWfFireApparatusBase, IdentityOverride);
+	DOREPLIFETIME(AWfFireApparatusBase, IdentityStation);
+	DOREPLIFETIME(AWfFireApparatusBase, IdentityType);
+	DOREPLIFETIME(AWfFireApparatusBase, IdentityUnique);
+}
+
+void AWfFireApparatusBase::OnRep_IdentityUnique_Implementation(const int32 OldIdentityValue)
+{
+	const FString OldCallsign = FString::Printf(
+		TEXT("%s %d%02d"), *IdentityType, IdentityStation, OldIdentityValue);
+	if (OnApparatusIdentityChanged.IsBound())
+		OnApparatusIdentityChanged.Broadcast(OldCallsign, GetApparatusIdentity());
+}
+
+void AWfFireApparatusBase::OnRep_IdentityApparatus_Implementation(const FString& OldIdentityValue)
+{
+	const FString OldCallsign = FString::Printf(
+		TEXT("%s %d%02d"), *OldIdentityValue, IdentityStation, IdentityUnique);
+	if (OnApparatusIdentityChanged.IsBound())
+		OnApparatusIdentityChanged.Broadcast(OldCallsign, GetApparatusIdentity());
+}
+
+void AWfFireApparatusBase::OnRep_IdentityStation_Implementation(const int32 OldIdentityValue)
+{
+	const FString OldCallsign = FString::Printf(
+		TEXT("%s %d%02d"), *IdentityType, OldIdentityValue, IdentityUnique);
+	if (OnApparatusIdentityChanged.IsBound())
+		OnApparatusIdentityChanged.Broadcast(OldCallsign, GetApparatusIdentity());
+}
+
+void AWfFireApparatusBase::OnRep_IdentityOverride_Implementation(const FString& OldIdentityValue)
+{
+	if (OnApparatusIdentityChanged.IsBound())
+		OnApparatusIdentityChanged.Broadcast(OldIdentityValue, GetApparatusIdentity());
 }
 
 void AWfFireApparatusBase::Tick(float DeltaTime)

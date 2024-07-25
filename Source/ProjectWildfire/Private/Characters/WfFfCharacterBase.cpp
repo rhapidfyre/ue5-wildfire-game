@@ -146,6 +146,8 @@ void AWfFfCharacterBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AWfFfCharacterBase, YearsOfService)
 	DOREPLIFETIME(AWfFfCharacterBase, YearsInGrade)
+	DOREPLIFETIME(AWfFfCharacterBase, ContractId)
+	DOREPLIFETIME(AWfFfCharacterBase, ContractUserIndex)
 	DOREPLIFETIME_CONDITION(AWfFfCharacterBase, bInQuarters,	COND_OwnerOnly)
 	DOREPLIFETIME_CONDITION(AWfFfCharacterBase, HourlyRate,		COND_OwnerOnly)
 }

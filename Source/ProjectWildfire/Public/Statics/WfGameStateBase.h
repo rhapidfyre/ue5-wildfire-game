@@ -44,10 +44,10 @@ public:
 	void JobContractExpired(const FJobContractData& JobContract);
 
 	UFUNCTION(BlueprintCallable)
-	void JobContractRemove(const FJobContractData& JobContract);
+	void JobContractRemove(const FJobContractData& JobContract, bool bDeleteSave = true);
 
 	UFUNCTION(BlueprintCallable)
-	void JobContractRemoveById(const FString& ContractId);
+	void JobContractRemoveById(const FString& ContractId, bool bDeleteSave = true);
 
 	UFUNCTION(BlueprintCallable)
 	FJobContractData GetJobContract(const FString& ContractId) const;

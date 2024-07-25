@@ -76,13 +76,14 @@ int AWfGameModeBase::GetNextFireStationNumber() const
         }
     }
 
-    for (int32 i = 1; ; ++i)
+    for (int32 i = 1; i < NumbersTaken.Num() + 1; ++i)
     {
         if (!NumbersTaken.Contains(i))
         {
             return i;
         }
     }
+    return -1;
 }
 
 // Returns the current surface temperature
@@ -776,7 +777,7 @@ void AWfGameModeBase::JobContractOffer(USaveGame* SaveGame)
     }
 }
 
-void AWfGameModeBase::JobContractExpired(const FJobContractData& JobContract)
+void AWfGameModeBase::JobContractExpired(const FJobContractData& JobContract, bool bDeleteSave)
 {
     const UWfFirefighterSaveGame* SaveGame = JobContract.SaveReference;
     if (IsValid(SaveGame))
@@ -796,7 +797,10 @@ void AWfGameModeBase::JobContractExpired(const FJobContractData& JobContract)
                     {
                         OnJobContractExpired.Broadcast(JobContract);
                     }
-                    UGameplayStatics::DeleteGameInSlot(JobContract.ContractId, JobContract.UserIndex);
+                    if (bDeleteSave)
+                    {
+                        UGameplayStatics::DeleteGameInSlot(JobContract.ContractId, JobContract.UserIndex);
+                    }
                     return;
                 }
             }

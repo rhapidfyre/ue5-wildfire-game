@@ -5,6 +5,7 @@
 
 #include "AIController.h"
 #include "Actors/WfFireStationBase.h"
+#include "Actors/WfVoxManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "Lib/WfGlobalConstants.h"
 #include "Logging/StructuredLog.h"
@@ -15,6 +16,7 @@
 #include "Statics/WfGameStateBase.h"
 #include "Statics/WfGlobalTags.h"
 #include "Vehicles/WfFireApparatusBase.h"
+#include "TextToSpeech/Private/Windows/WindowsTextToSpeechFactory.h"
 
 
 FFirefighterAssignment::FFirefighterAssignment()
@@ -28,7 +30,7 @@ FFireApparatusFleet::FFireApparatusFleet()
 }
 
 FFleetPurchaseData::FFleetPurchaseData()
-	: PurchaseValue(0.0f)
+	: DisplayIcon(nullptr), PurchaseValue(0.0f)
 {
 }
 
@@ -42,6 +44,163 @@ AWfPlayerStateBase::AWfPlayerStateBase()
 void AWfPlayerStateBase::Server_SetFireStation_Implementation(AWfFireStationBase* FireStation)
 {
 	SetFireStationReference(FireStation);
+}
+
+void AWfPlayerStateBase::Client_FireApparatusPurchased_Implementation(const FFireApparatusFleet& NewApparatusData)
+{
+	if (OnFireApparatusPurchase.IsBound())
+	{
+		OnFireApparatusPurchase.Broadcast(NewApparatusData.VehicleReference);
+	}
+}
+
+void AWfPlayerStateBase::OnRep_FleetData_Implementation(const TArray<FFireApparatusFleet>& OldFleetData)
+{
+    TMap<AWfFireApparatusBase*, AWfFireStationBase*> OldFleetMap;
+    TMap<AWfFireApparatusBase*, AWfFireStationBase*> NewFleetMap;
+    TSet<AWfFireApparatusBase*> PreviousVehicles;
+    TSet<AWfFireApparatusBase*> CurrentVehicles;
+    TMap<AWfFireApparatusBase*, AWfFireStationBase*> ChangedAssignments;
+
+    // Populate old fleet map and set of previous vehicles
+    for (const auto& OldFleet : OldFleetData)
+    {
+        if (IsValid(OldFleet.VehicleReference))
+        {
+            OldFleetMap.Add(OldFleet.VehicleReference, OldFleet.FireStationBase);
+            PreviousVehicles.Add(OldFleet.VehicleReference);
+        }
+    }
+
+    // Populate new fleet map and set of current vehicles
+    for (const auto& NewFleet : FleetData)
+    {
+        if (IsValid(NewFleet.VehicleReference))
+        {
+            NewFleetMap.Add(NewFleet.VehicleReference, NewFleet.FireStationBase);
+            CurrentVehicles.Add(NewFleet.VehicleReference);
+        }
+    }
+
+    // Detect changed or newly added assignments
+    for (const auto& NewAssignment : NewFleetMap)
+    {
+        AWfFireApparatusBase* Vehicle = NewAssignment.Key;
+        AWfFireStationBase* NewStation = NewAssignment.Value;
+
+        if (OldFleetMap.Contains(Vehicle))
+        {
+            AWfFireStationBase* OldStation = OldFleetMap[Vehicle];
+            if (OldStation != NewStation)
+            {
+                ChangedAssignments.Add(Vehicle, NewStation);
+            }
+        }
+        else
+        {
+            ChangedAssignments.Add(Vehicle, NewStation);
+        }
+    }
+
+    // Detect removed vehicles
+    for (const auto& OldVehicle : PreviousVehicles)
+    {
+        if (!CurrentVehicles.Contains(OldVehicle))
+        {
+            ChangedAssignments.Add(OldVehicle, nullptr);
+        }
+    }
+
+    // Notify Delegates
+    if (OnFleetChanged.IsBound())
+    {
+        for (const auto& ChangedData : ChangedAssignments)
+        {
+            FFireApparatusFleet FleetAssignment;
+            FleetAssignment.VehicleReference = ChangedData.Key;
+            FleetAssignment.FireStationBase  = ChangedData.Value;
+        	OnFleetChanged.Broadcast(FleetAssignment);
+        	UE_LOGFMT(LogTemp, Error, "PlayerState({NetMode}): '{VehicleName}' assigned to {StationName}"
+				, HasAuthority() ? "SRV" : "CLI", ChangedData.Key->GetApparatusIdentity()
+				, IsValid(ChangedData.Value) ? ("Fire Station #" + ChangedData.Value->FireStationNumber) : "NULL");
+        }
+    }
+}
+
+void AWfPlayerStateBase::OnRep_PersonnelData_Implementation(const TArray<FFirefighterAssignment>& OldAssignments)
+{
+    TMap<AWfFfCharacterBase*, AWfFireApparatusBase*> OldAssignmentMap;
+    TMap<AWfFfCharacterBase*, AWfFireApparatusBase*> NewAssignmentMap;
+    TSet<AWfFfCharacterBase*> PreviousFirefighters;
+    TSet<AWfFfCharacterBase*> CurrentFirefighters;
+    TMap<AWfFfCharacterBase*, AWfFireApparatusBase*> ChangedAssignments;
+
+    // Populate old assignments map and set of previous firefighters
+    for (const auto& OldAssignment : OldAssignments)
+    {
+        OldAssignmentMap.Add(OldAssignment.CharacterReference, OldAssignment.AssignedVehicle);
+        PreviousFirefighters.Add(OldAssignment.CharacterReference);
+    }
+
+    // Populate new assignments map and set of current firefighters
+    for (const auto& NewAssignment : PersonnelData)
+    {
+        if (IsValid(NewAssignment.CharacterReference))
+        {
+            NewAssignmentMap.Add(NewAssignment.CharacterReference, NewAssignment.AssignedVehicle);
+            CurrentFirefighters.Add(NewAssignment.CharacterReference);
+        }
+    }
+
+    // Detect changed or newly added assignments
+    for (const auto& NewAssignment : NewAssignmentMap)
+    {
+        AWfFfCharacterBase* Character = NewAssignment.Key;
+        AWfFireApparatusBase* NewVehicle = NewAssignment.Value;
+
+        if (OldAssignmentMap.Contains(Character))
+        {
+            AWfFireApparatusBase* OldVehicle = OldAssignmentMap[Character];
+            if (OldVehicle != NewVehicle)
+            {
+                ChangedAssignments.Add(Character, NewVehicle);
+            }
+        }
+        else
+        {
+            ChangedAssignments.Add(Character, NewVehicle);
+        }
+    }
+
+    // Detect removed firefighters
+    for (const auto& OldFirefighter : PreviousFirefighters)
+    {
+        if (!CurrentFirefighters.Contains(OldFirefighter))
+        {
+            ChangedAssignments.Add(OldFirefighter, nullptr);
+        }
+    }
+
+    // Notify Delegates
+    if (OnAssignmentChanged.IsBound())
+    {
+        for (const auto& ChangedData : ChangedAssignments)
+        {
+            FFirefighterAssignment FirefighterAssignment;
+            FirefighterAssignment.AssignedVehicle = ChangedData.Value;
+        	FirefighterAssignment.CharacterReference = ChangedData.Key;
+        	UE_LOGFMT(LogTemp, Error, "PlayerState({NetMode}): '{CharacterName}' assigned to '{VehicleName}'"
+				, HasAuthority() ? "SRV" : "CLI", ChangedData.Key->GetCharacterName()
+				, IsValid(ChangedData.Value) ? ChangedData.Value->GetApparatusIdentity() : "(unassigned)");
+            OnAssignmentChanged.Broadcast(FirefighterAssignment);
+        }
+    }
+}
+
+void AWfPlayerStateBase::Server_SetAssignedApparatus_Implementation(AWfFfCharacterBase* FireCharacter,
+	AWfFireApparatusBase* FireApparatus)
+{
+	SetAssignedApparatus(FireCharacter, FireApparatus);
 }
 
 void AWfPlayerStateBase::SetResourceValue(const FGameplayTag& ResourceTag, const float NewValue)
@@ -142,6 +301,19 @@ AWfFireStationBase* AWfPlayerStateBase::GetFireStationReference() const
 	return FireStationBase;
 }
 
+AWfFireApparatusBase* AWfPlayerStateBase::GetAssignedApparatus(const AWfFfCharacterBase* FireFighter)
+{
+	if (IsValid(FireFighter))
+	{
+		for (const auto& FirefighterData : GetAllPersonnel())
+		{
+			if (FirefighterData.CharacterReference == FireFighter)
+				return FirefighterData.AssignedVehicle;
+		}
+	}
+	return nullptr;
+}
+
 void AWfPlayerStateBase::PurchaseFireApparatus(const FFleetPurchaseData& PurchaseData)
 {
 	if (PurchaseData.FireApparatusType)
@@ -160,7 +332,7 @@ void AWfPlayerStateBase::PurchaseFireApparatus(const FFleetPurchaseData& Purchas
 		}
 
 		// Determine the fire station's available parking spots
-		FTransform NewTransform(FVector(0.0f));
+		FTransform SpawnTransform(FVector(0.0f));
 		if (IsValid(FireStationBase))
 		{
 			UParkingSpotComponent* ParkingSpot = nullptr;
@@ -181,23 +353,81 @@ void AWfPlayerStateBase::PurchaseFireApparatus(const FFleetPurchaseData& Purchas
 				return;
 			}
 
-			NewTransform.SetLocation(ParkingSpot->GetComponentLocation());
-			NewTransform.SetRotation(ParkingSpot->GetComponentQuat());
+			FVector SpawnLocation(ParkingSpot->GetComponentLocation());
+			FQuat   SpawnRotation(ParkingSpot->GetComponentQuat());
+			SpawnTransform.SetLocation(SpawnLocation);
+			SpawnTransform.SetRotation(SpawnRotation);
 		}
 
-		FFireApparatusFleet NewFleetData;
-		NewFleetData.VehicleReference = GetWorld()->SpawnActorDeferred<AWfFireApparatusBase>
-			(PurchaseData.FireApparatusType->StaticClass(), NewTransform, this);
+		if (GetMoney() < PurchaseData.PurchaseValue)
+		{
+			Client_PurchaseError(WfError::GError_Not_Enough_Money);
+			return;
+		}
+		RemoveMoney(PurchaseData.PurchaseValue);
 
-		NewFleetData.VehicleReference->FinishSpawning(NewTransform);
+		AWfFireStationBase* OwningFireStation = GetFireStationReference();
+		TSubclassOf<AWfFireApparatusBase> SpawnClass = PurchaseData.FireApparatusType;
 
+		// Determine the next vehicle unique number in sequence
+		int NextNumber = 1;
+		for (const auto& FleetVehicle : FleetData)
+		{
+			if (IsValid(FleetVehicle.VehicleReference))
+			{
+				if (FleetVehicle.VehicleReference->GetApparatusIdentityType() == PurchaseData.ApparatusCallsign
+					&& FleetVehicle.VehicleReference->GetApparatusIdentityStation() == FireStationBase->FireStationNumber)
+				{
+					NextNumber++;
+				}
+			}
+		}
+
+		AWfFireApparatusBase* NewApparatus = GetWorld()->SpawnActorDeferred<AWfFireApparatusBase>
+			(SpawnClass, SpawnTransform, OwningFireStation, nullptr, ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
+
+		if (IsValid(NewApparatus))
+		{
+			NewApparatus->SetIdentities(
+				OwningFireStation->FireStationNumber, PurchaseData.ApparatusCallsign.ToString(), NextNumber);
+
+			NewApparatus->FinishSpawning(SpawnTransform);
+			FFireApparatusFleet NewFleetData;
+			NewFleetData.VehicleReference = NewApparatus;
+			NewFleetData.FireStationBase  = FireStationBase;
+
+			FleetData.Add(NewFleetData);
+
+			UE_LOGFMT(LogTemp, Display, "Spawned '{NewCallsign}', owned by Fire Station #{StationNumber}"
+				, NewApparatus->GetApparatusIdentity(), NewFleetData.FireStationBase->FireStationNumber);
+			if (OnFireApparatusPurchase.IsBound())
+			{
+				OnFireApparatusPurchase.Broadcast(NewApparatus);
+			}
+			Client_FireApparatusPurchased(NewFleetData);
+		}
+		else
+		{
+			UE_LOGFMT(LogTemp, Error, "Failed to Spawn Apparatus '{NewApparatus}' (Class '{NewClass}')"
+				, PurchaseData.DisplayName, PurchaseData.FireApparatusType->GetName());
+		}
 	}
 }
 
 void AWfPlayerStateBase::SetAssignedApparatus(AWfFfCharacterBase* FireCharacter, AWfFireApparatusBase* FireApparatus)
 {
-	if (!IsValid(FireCharacter))
+	if (!HasAuthority())
+	{
+		Server_SetAssignedApparatus(FireCharacter, FireApparatus);
 		return;
+	}
+
+	if (!IsValid(FireCharacter))
+	{
+		UE_LOGFMT(LogTemp, Error, "PlayerState({NetMode}): SetAssignedApparatus received NULL 'FireCharacter'"
+			, HasAuthority() ? "SRV" : "CLI");
+		return;
+	}
 
 	FFirefighterAssignment* AssignmentData = nullptr;
 	int numPersonnel = 0;
@@ -232,13 +462,22 @@ void AWfPlayerStateBase::SetAssignedApparatus(AWfFfCharacterBase* FireCharacter,
 	}
 
 	if (AssignmentData)
+	{
 		AssignmentData->AssignedVehicle = FireApparatus;
+		UE_LOGFMT(LogTemp, Display, "PlayerState({NetMode}): Updated Assignment: '{CharacterName}' assigned to '{VehicleName}'"
+			, HasAuthority() ? "SRV" : "CLI", FireCharacter->GetCharacterName()
+			, IsValid(FireApparatus) ? FireApparatus->GetApparatusIdentity() : "(unassigned)");
+	}
 	else
 	{
 		FFirefighterAssignment NewAssignment;
 		NewAssignment.AssignedVehicle = FireApparatus;
 		NewAssignment.CharacterReference = FireCharacter;
 		PersonnelData.Add(NewAssignment);
+		AssignmentData = &NewAssignment;
+		UE_LOGFMT(LogTemp, Display, "PlayerState({NetMode}): New Assignment: '{CharacterName}' assigned to '{VehicleName}'"
+			, HasAuthority() ? "SRV" : "CLI", FireCharacter->GetCharacterName()
+			, IsValid(FireApparatus) ? FireApparatus->GetApparatusIdentity() : "(unassigned)");
 	}
 }
 
@@ -316,7 +555,7 @@ AWfFfCharacterBase* AWfPlayerStateBase::AcceptJobContract(const FJobContractData
 		AWfGameStateBase* GameStateBase = Cast<AWfGameStateBase>( GetWorld()->GetGameState() );
 		if (IsValid(GameStateBase))
 		{
-			GameStateBase->JobContractRemove(JobContract);
+			GameStateBase->JobContractRemove(JobContract, false);
 		}
 
 		UE_LOGFMT(LogTemp, Display, "AcceptJobContract({NetMode}): Successfully Hired '{CharacterName}'!"
