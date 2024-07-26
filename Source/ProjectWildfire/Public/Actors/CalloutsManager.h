@@ -5,8 +5,12 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Engine/DataTable.h"
-#include "Statics/WfGlobalData.h"
 #include "CalloutsManager.generated.h"
+
+struct FCalloutData;
+struct FCallouts;
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCalloutExpired, const FCalloutData&, CalloutData);
 
 UCLASS(Blueprintable, BlueprintType)
 class PROJECTWILDFIRE_API ACalloutsManager : public AActor
@@ -23,6 +27,8 @@ public:
 	UFUNCTION(BlueprintCallable) void ForceCallout(const FName& CalloutType);
 	UFUNCTION(BlueprintCallable) void GenerateCallout();
 
+	void Multicast_CalloutExpired(const FCalloutData& CalloutData);
+
 
 	UFUNCTION(BlueprintCallable, Server, Reliable)
 	void Server_ForceCallout(const FName& CalloutType);
@@ -32,9 +38,23 @@ protected:
 
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
+	// Pre-blueprint interception of event creation (prior to 'CreateCallout()')
+	UFUNCTION(BlueprintNativeEvent)
+	void NewCallout(const FName& CalloutType, FCalloutData& CalloutData);
+
+	// Creates the callout actor & data
+	virtual void CreateCallout(const FName& CalloutType, FCalloutData& CalloutData);
+
+public:
+
+	UPROPERTY(BlueprintAssignable) FOnCalloutExpired OnCalloutExpired;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Callouts Manager")
+	float SecondsToRespond = 30.0f;
+
 private:
 
-	FCallouts GetCalloutData(const FName& CalloutType) const;
+	FCallouts GetCalloutDataRow(const FName& CalloutType) const;
 
 	static ACalloutsManager* Instance;
 	FTimerHandle CalloutTimerHandle;

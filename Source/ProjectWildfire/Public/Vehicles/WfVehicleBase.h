@@ -47,8 +47,20 @@ public:
 	UFUNCTION(BlueprintPure)
 	AWfCharacterBase* GetSeatOccupant(const int SeatNumber) const;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Actor Settings")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Actor Settings")
 	int NumberOfSeats = 2;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Actor Settings")
+	int VehicleYear;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Actor Settings")
+	FString VehicleMake;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Actor Settings")
+	FString VehicleModel;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Actor Settings")
+	FString VehicleDisplayName;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Actor Components")
 	USpringArmComponent* SpringArm;

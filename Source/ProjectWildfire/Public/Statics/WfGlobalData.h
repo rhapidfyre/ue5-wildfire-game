@@ -73,20 +73,3 @@ struct PROJECTWILDFIRE_API FShiftSchedule
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Shift Schedule") FTimespan StartTime;
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Shift Schedule") FTimespan Duration;
 };
-
-
-USTRUCT(BlueprintType)
-struct PROJECTWILDFIRE_API FCallouts : public FTableRowBase
-{
-	GENERATED_BODY()
-
-	FCallouts();
-
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Callouts") FString DisplayName;
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Callouts") int	 AlertLevel;
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Callouts") FName VoxPhrase;
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Callouts") float Payment;
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Callouts") float Penalty;
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Callouts") FTimespan TimeToRespond;
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Callouts") TMap< TSubclassOf<AWfVehicleBase>, int > MinimumUnits;
-};

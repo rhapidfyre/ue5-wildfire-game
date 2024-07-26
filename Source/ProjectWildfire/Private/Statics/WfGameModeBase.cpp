@@ -252,12 +252,13 @@ void AWfGameModeBase::BeginPlay()
         InitSeasonalDates();
 
     FDateTime StartingTime = FDateTime::UtcNow();
-    if (StartTimeOverride > FDateTime::MinValue())
+    if (StartTimeOverride > FDateTime(1990, 1, 1))
         StartingTime = StartTimeOverride;
 
     GameDateTime   = StartingTime;
     OriginDateTime = StartingTime;
 
+    UE_LOGFMT(LogGameMode, Display, "Game Started at UTC {UtcNow}", GameDateTime.ToString());
     SetCurrentWeather(EWeatherCondition::Clear);
 
     InitDailyTemperatureRange();

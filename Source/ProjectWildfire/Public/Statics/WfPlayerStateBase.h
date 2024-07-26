@@ -13,6 +13,7 @@
 #include "WfPlayerStateBase.generated.h"
 
 
+class AWfCalloutActor;
 class AAIController;
 class AWfGameModeBase;
 class AWfFireStationBase;
@@ -48,6 +49,10 @@ struct PROJECTWILDFIRE_API FFireApparatusFleet
 	// Which fire station the apparatus is assigned to
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Fleet")
 	AWfFireStationBase* FireStationBase;
+
+	// Which incident the apparatus is assigned to
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Fleet")
+	AWfCalloutActor* CalloutAssigned;
 
 };
 
@@ -104,8 +109,17 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	FOnFleetChanged, const FFireApparatusFleet&, AssignmentData);
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
+	FOnIncidentReceived, const AWfCalloutActor*, CalloutActor);
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
+	FOnIncidentExpired, const AWfCalloutActor*, CalloutActor);
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
 	FOnFireStationChanged, const AWfFireStationBase*, NewFireStation, const bool, bIsOwned);
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
+	FOnApparatusAssignment, const AWfFireApparatusBase*, FireApparatus, const AWfCalloutActor*, CalloutActor);
 
 
 /**
@@ -122,6 +136,16 @@ public:
 
 	AWfPlayerStateBase();
 
+	void NotifyCallout(const AWfCalloutActor* CalloutActor);
+
+	UFUNCTION(BlueprintPure)
+	FDateTime GetGameDateTime() const { return GameDateTime; }
+
+	UFUNCTION(BlueprintCallable)
+	void AssignToCallout(AWfFireApparatusBase* FireApparatus, AWfCalloutActor* CalloutActor);
+
+	UFUNCTION(BlueprintCallable)
+	void UnassignFromCallout(AWfFireApparatusBase* FireApparatus);
 
 	UFUNCTION(BlueprintCallable)
 	AWfFfCharacterBase* AcceptJobContract(
@@ -197,7 +221,12 @@ public:
 
 	virtual void BeginPlay() override;
 
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
 protected:
+
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_ApparatusAssignment(const AWfFireApparatusBase* FireApparatus, const AWfCalloutActor* CalloutActor);
 
 	UFUNCTION(Server, Reliable)
 	void Server_AcceptContract(const FJobContractData& JobContract);
@@ -215,9 +244,17 @@ protected:
 	UFUNCTION(Client, Reliable, BlueprintCallable)
 	void Client_PurchaseError(const FText& ErrorReason);
 
-
 	UFUNCTION(Server, Reliable, BlueprintCallable)
 	void Server_SetFireStation(AWfFireStationBase* FireStation);
+
+	UFUNCTION(BlueprintCallable)
+	void Server_AssignToCallout(AWfFireApparatusBase* FireApparatus, AWfCalloutActor* CalloutActor);
+
+	UFUNCTION(BlueprintCallable)
+	void Server_UnassignFromCallout(AWfFireApparatusBase* FireApparatus);
+
+	UFUNCTION()
+	void SynchronizeTime();
 
 private:
 
@@ -264,35 +301,19 @@ private:
 
 public:
 
-	UPROPERTY(BlueprintAssignable)
-	FOnResourceUpdated OnResourceUpdated;
-
-	UPROPERTY(BlueprintAssignable)
-	FOnFirefighterHired OnFirefighterHired;
-
-	UPROPERTY(BlueprintAssignable)
-	FOnFirefighterFired OnFirefighterFired;
-
-	UPROPERTY(BlueprintAssignable)
-	FOnFirefighterDeath OnFirefighterDeath;
-
-	UPROPERTY(BlueprintAssignable)
-	FOnFireStationChanged OnFireStationChanged;
-
-	UPROPERTY(BlueprintAssignable)
-	FOnFireApparatusPurchase OnFireApparatusPurchase;
-
-	UPROPERTY(BlueprintAssignable)
-	FOnFireApparatusDestroyed OnFireApparatusDestroyed;
-
-	UPROPERTY(BlueprintAssignable)
-	FOnFireApparatusPurchaseFail OnFireApparatusPurchaseFail;
-
-	UPROPERTY(BlueprintAssignable)
-	FOnAssignmentChanged OnAssignmentChanged;
-
-	UPROPERTY(BlueprintAssignable)
-	FOnFleetChanged OnFleetChanged;
+	UPROPERTY(BlueprintAssignable)	FOnResourceUpdated OnResourceUpdated;
+	UPROPERTY(BlueprintAssignable)	FOnFirefighterHired OnFirefighterHired;
+	UPROPERTY(BlueprintAssignable)	FOnFirefighterFired OnFirefighterFired;
+	UPROPERTY(BlueprintAssignable)	FOnFirefighterDeath OnFirefighterDeath;
+	UPROPERTY(BlueprintAssignable)	FOnFireStationChanged OnFireStationChanged;
+	UPROPERTY(BlueprintAssignable)	FOnFireApparatusPurchase OnFireApparatusPurchase;
+	UPROPERTY(BlueprintAssignable)	FOnFireApparatusDestroyed OnFireApparatusDestroyed;
+	UPROPERTY(BlueprintAssignable)	FOnFireApparatusPurchaseFail OnFireApparatusPurchaseFail;
+	UPROPERTY(BlueprintAssignable)	FOnAssignmentChanged OnAssignmentChanged;
+	UPROPERTY(BlueprintAssignable)	FOnIncidentReceived OnIncidentReceived;
+	UPROPERTY(BlueprintAssignable)	FOnIncidentExpired OnIncidentExpired;
+	UPROPERTY(BlueprintAssignable)	FOnFleetChanged OnFleetChanged;
+	UPROPERTY(BlueprintAssignable)	FOnApparatusAssignment OnApparatusAssignment;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Actor Settings")
 	TSubclassOf<AAIController> UsingAiController;
@@ -314,5 +335,8 @@ private:
 	AWfGameModeBase* GameModeBase;
 
 	TMap<FGameplayTag, float> Resources;
+
+	UPROPERTY(Replicated) FDateTime GameDateTime;
+	FTimerHandle GameDateTimer;
 
 };

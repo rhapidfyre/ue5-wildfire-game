@@ -22,6 +22,29 @@ void AWfFireApparatusBase::SetIdentities(const int32 StationNumber, const FStrin
 	IdentityUnique = UniqueNumber;
 }
 
+void AWfFireApparatusBase::SetFirefighterAssigned(AWfFfCharacterBase* FireFighter, const bool bAssign)
+{
+	if (!HasAuthority())
+	{
+		Server_SetFirefighterAssigned(FireFighter, bAssign);
+		return;
+	}
+	if (bAssign)
+	{
+		if (!AssignedFirefighters.Contains(FireFighter))
+		{
+			AssignedFirefighters.Add(FireFighter);
+		}
+	}
+	else
+	{
+		if (AssignedFirefighters.Contains(FireFighter))
+		{
+			AssignedFirefighters.Remove(FireFighter);
+		}
+	}
+}
+
 FString AWfFireApparatusBase::GetApparatusIdentity() const
 {
 	if (!IdentityOverride.IsEmpty())
@@ -53,6 +76,11 @@ void AWfFireApparatusBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>&
 	DOREPLIFETIME(AWfFireApparatusBase, IdentityStation);
 	DOREPLIFETIME(AWfFireApparatusBase, IdentityType);
 	DOREPLIFETIME(AWfFireApparatusBase, IdentityUnique);
+}
+
+void AWfFireApparatusBase::Server_SetFirefighterAssigned_Implementation(AWfFfCharacterBase* FireFighter, const bool bAssign)
+{
+	SetFirefighterAssigned(FireFighter, bAssign);
 }
 
 void AWfFireApparatusBase::OnRep_IdentityUnique_Implementation(const int32 OldIdentityValue)

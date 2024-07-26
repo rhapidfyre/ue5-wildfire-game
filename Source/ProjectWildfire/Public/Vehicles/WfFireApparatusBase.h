@@ -8,6 +8,8 @@
 
 #include "WfFireApparatusBase.generated.h"
 
+class AWfFfCharacterBase;
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
 	FOnApparatusIdentityChanged, const FString&, OldIdentity, const FString&, NewIdentity);
 
@@ -29,6 +31,12 @@ public:
 	void SetIdentities(
 		const int32 StationNumber, const FString& ApparatusType, const int32 UniqueNumber);
 
+	UFUNCTION(BlueprintPure)
+	TArray<AWfFfCharacterBase*> GetAssignedFirefighters() const { return AssignedFirefighters; }
+
+	UFUNCTION(BlueprintCallable)
+	void SetFirefighterAssigned(AWfFfCharacterBase* FireFighter, const bool bAssign = true);
+
 	UFUNCTION(BlueprintPure) FString GetApparatusIdentity() const;
 	UFUNCTION(BlueprintPure) int32 GetApparatusIdentityStation() const { return IdentityStation; }
 	UFUNCTION(BlueprintPure) FString GetApparatusIdentityType() const { return IdentityType; }
@@ -48,6 +56,9 @@ protected:
 	virtual void GetLifetimeReplicatedProps(
 		TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
+	UFUNCTION(Server, Reliable)
+	void Server_SetFirefighterAssigned(AWfFfCharacterBase* FireFighter, const bool bAssign);
+
 public: // Public Members
 
 	UPROPERTY(BlueprintAssignable) FOnApparatusIdentityChanged OnApparatusIdentityChanged;
@@ -65,4 +76,6 @@ private: // Private Members
 	UPROPERTY(ReplicatedUsing=OnRep_IdentityStation)   int32   IdentityStation;
 	UPROPERTY(ReplicatedUsing=OnRep_IdentityApparatus) FString IdentityType;
 	UPROPERTY(ReplicatedUsing=OnRep_IdentityUnique)    int32   IdentityUnique;
+
+	UPROPERTY(Replicated) TArray<AWfFfCharacterBase*> AssignedFirefighters;
 };

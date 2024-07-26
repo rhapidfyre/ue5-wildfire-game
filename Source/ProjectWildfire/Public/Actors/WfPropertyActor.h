@@ -22,6 +22,9 @@ public:
 
 	virtual void Tick(float DeltaTime) override;
 
+	UFUNCTION(BlueprintPure) FStreetAddress GetStreetAddress() const;
+	UFUNCTION(BlueprintPure) FString GetStreetAddressAsString() const;
+
 protected:
 
 	virtual void BeginPlay() override;

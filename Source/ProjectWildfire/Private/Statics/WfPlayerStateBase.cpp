@@ -8,6 +8,7 @@
 #include "Actors/WfVoxManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "Lib/WfGlobalConstants.h"
+#include "Lib/WfCalloutData.h"
 #include "Logging/StructuredLog.h"
 #include "Messages/WfErrorMessages.h"
 #include "Net/UnrealNetwork.h"
@@ -25,7 +26,7 @@ FFirefighterAssignment::FFirefighterAssignment()
 }
 
 FFireApparatusFleet::FFireApparatusFleet()
-	: VehicleReference(nullptr), FireStationBase(nullptr)
+	: VehicleReference(nullptr), FireStationBase(nullptr), CalloutAssigned(nullptr)
 {
 }
 
@@ -39,6 +40,90 @@ AWfPlayerStateBase::AWfPlayerStateBase()
 	  GameModeBase(nullptr),
 	  Resources({})
 {
+}
+
+void AWfPlayerStateBase::NotifyCallout(const AWfCalloutActor* CalloutActor)
+{
+	if (IsValid(CalloutActor) && OnIncidentReceived.IsBound())
+	{
+		OnIncidentReceived.Broadcast(CalloutActor);
+	}
+}
+
+void AWfPlayerStateBase::AssignToCallout(AWfFireApparatusBase* FireApparatus, AWfCalloutActor* CalloutActor)
+{
+	if (!HasAuthority())
+	{
+		Server_AssignToCallout(FireApparatus, CalloutActor);
+		return;
+	}
+
+	if (!IsValid(FireApparatus))
+	{
+		UE_LOGFMT(LogTemp, Error, "PlayerState({NetMode}): Failed to assign callout - FireApparatus was NULL."
+			, HasAuthority() ? "SRV" : "CLI");
+		return;
+	}
+
+	if (!IsValid(CalloutActor))
+	{
+		UE_LOGFMT(LogTemp, Error, "PlayerState({NetMode}): Failed to assign callout - Callout does not exist"
+			, HasAuthority() ? "SRV" : "CLI");
+		return;
+	}
+
+	for (auto& AssignmentData : FleetData)
+	{
+		if (IsValid(AssignmentData.VehicleReference))
+		{
+			if (AssignmentData.VehicleReference == FireApparatus)
+			{
+				// Assign the apparatus to the call
+				AssignmentData.CalloutAssigned = CalloutActor;
+				Multicast_ApparatusAssignment(FireApparatus, CalloutActor);
+
+				// Assign all personnel on this vehicle to the call
+				for (auto& FireFighter : PersonnelData)
+				{
+					UE_LOGFMT(LogTemp, Display, "PlayerState({NetMode}): Assigned '{CharacterName}' to '{Callout}'"
+						, HasAuthority() ? "SRV" : "CLI", FireFighter.CharacterReference->GetCharacterName(), CalloutActor->GetName());
+
+					CalloutActor->AssignUnitToCallout(AssignmentData.VehicleReference, FireFighter.CharacterReference);
+				}
+				return;
+			}
+		}
+	}
+	UE_LOGFMT(LogTemp, Error, "PlayerState({NetMode}): Failed to assign callout. Assigned Apparatus was not found."
+		, HasAuthority() ? "SRV" : "CLI");
+}
+
+void AWfPlayerStateBase::UnassignFromCallout(AWfFireApparatusBase* FireApparatus)
+{
+	if (!HasAuthority())
+	{
+		Server_UnassignFromCallout(FireApparatus);
+		return;
+	}
+
+	if (!IsValid(FireApparatus))
+	{
+		UE_LOGFMT(LogTemp, Error, "PlayerState({NetMode}): Failed to unassign callout - FireApparatus was NULL."
+			, HasAuthority() ? "SRV" : "CLI");
+		return;
+	}
+
+	for (auto& VehicleData : FleetData)
+	{
+		if (VehicleData.VehicleReference == FireApparatus)
+		{
+			VehicleData.CalloutAssigned = nullptr;
+			Multicast_ApparatusAssignment(FireApparatus, nullptr);
+			UE_LOGFMT(LogTemp, Error, "PlayerState({NetMode}): '{FireApp}' Unassigned"
+				, HasAuthority() ? "SRV" : "CLI", FireApparatus->GetName());
+			return;
+		}
+	}
 }
 
 void AWfPlayerStateBase::Server_SetFireStation_Implementation(AWfFireStationBase* FireStation)
@@ -463,18 +548,25 @@ void AWfPlayerStateBase::SetAssignedApparatus(AWfFfCharacterBase* FireCharacter,
 
 	if (AssignmentData)
 	{
-		AssignmentData->AssignedVehicle = FireApparatus;
+		if (IsValid(FireApparatus))
+			FireApparatus->SetFirefighterAssigned(FireCharacter);
+		else if (IsValid(AssignmentData->AssignedVehicle))
+			AssignmentData->AssignedVehicle->SetFirefighterAssigned(FireCharacter, false);
+
 		UE_LOGFMT(LogTemp, Display, "PlayerState({NetMode}): Updated Assignment: '{CharacterName}' assigned to '{VehicleName}'"
 			, HasAuthority() ? "SRV" : "CLI", FireCharacter->GetCharacterName()
 			, IsValid(FireApparatus) ? FireApparatus->GetApparatusIdentity() : "(unassigned)");
 	}
 	else
 	{
+		if (IsValid(FireApparatus))
+			FireApparatus->SetFirefighterAssigned(FireCharacter);
+
 		FFirefighterAssignment NewAssignment;
 		NewAssignment.AssignedVehicle = FireApparatus;
 		NewAssignment.CharacterReference = FireCharacter;
 		PersonnelData.Add(NewAssignment);
-		AssignmentData = &NewAssignment;
+
 		UE_LOGFMT(LogTemp, Display, "PlayerState({NetMode}): New Assignment: '{CharacterName}' assigned to '{VehicleName}'"
 			, HasAuthority() ? "SRV" : "CLI", FireCharacter->GetCharacterName()
 			, IsValid(FireApparatus) ? FireApparatus->GetApparatusIdentity() : "(unassigned)");
@@ -619,6 +711,7 @@ void AWfPlayerStateBase::BeginPlay()
 {
 	Super::BeginPlay();
 	SetupInitialResourceValues();
+
 	if (HasAuthority())
 	{
 		GameModeBase = Cast<AWfGameModeBase>( GetWorld()->GetAuthGameMode() );
@@ -626,7 +719,30 @@ void AWfPlayerStateBase::BeginPlay()
 		{
 			GameModeBase->OnGameHourlyTick.AddDynamic(this, &AWfPlayerStateBase::HourlyTick);
 		}
+
+		FTimerDelegate DateTimeDelegate;
+		DateTimeDelegate.BindUObject(this, &AWfPlayerStateBase::SynchronizeTime);
+		GetWorldTimerManager().SetTimer(GameDateTimer, DateTimeDelegate, 1.0f, true);
 	}
+}
+
+void AWfPlayerStateBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	Super::EndPlay(EndPlayReason);
+	if (GameDateTimer.IsValid())
+		GameDateTimer.Invalidate();
+}
+
+/**
+ * \brief Triggered whenever a vehicle's call assignment is changed.
+ * \param FireApparatus The vehicle changing assignment
+ * \param CalloutActor The callout the vehicle is being assigned to. Nullptr means unassigned.
+ */
+void AWfPlayerStateBase::Multicast_ApparatusAssignment_Implementation(const AWfFireApparatusBase* FireApparatus,
+                                                                      const AWfCalloutActor* CalloutActor)
+{
+	if (OnApparatusAssignment.IsBound())
+		OnApparatusAssignment.Broadcast(FireApparatus, CalloutActor);
 }
 
 void AWfPlayerStateBase::Server_PurchaseFireApparatus_Implementation(const FFleetPurchaseData& PurchaseData)
@@ -639,7 +755,8 @@ void AWfPlayerStateBase::HourlyTick(const FDateTime& NewDateTime)
 	UE_LOGFMT(LogTemp, Display, "HourlyTick()");
 	if (HasAuthority())
 	{
-
+		// Synchronize time with game mode/server
+		GameDateTime = NewDateTime;
 	}
 }
 
@@ -683,7 +800,27 @@ void AWfPlayerStateBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 
 	DOREPLIFETIME(AWfPlayerStateBase, FireStationBase);
 
-	DOREPLIFETIME_CONDITION(AWfPlayerStateBase, PersonnelData, COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(AWfPlayerStateBase, PersonnelData,	COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(AWfPlayerStateBase, FleetData,		COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(AWfPlayerStateBase, GameDateTime,	COND_OwnerOnly);
+}
+
+void AWfPlayerStateBase::Server_AssignToCallout(AWfFireApparatusBase* FireApparatus, AWfCalloutActor* CalloutActor)
+{
+	AssignToCallout(FireApparatus, CalloutActor);
+}
+
+void AWfPlayerStateBase::Server_UnassignFromCallout(AWfFireApparatusBase* FireApparatus)
+{
+	UnassignFromCallout(FireApparatus);
+}
+
+void AWfPlayerStateBase::SynchronizeTime()
+{
+	if (IsValid(GameModeBase))
+	{
+		GameDateTime = GameModeBase->GetGameDateTime();
+	}
 }
 
 void AWfPlayerStateBase::Client_PurchaseError_Implementation(const FText& ErrorReason)

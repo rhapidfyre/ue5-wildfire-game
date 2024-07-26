@@ -25,10 +25,3 @@ FShiftSchedule::FShiftSchedule()
 	  Duration(FTimespan(3, 0, 0, 0))
 {
 }
-
-FCallouts::FCallouts()
-	: AlertLevel(0)
-    , Payment(0)
-    , Penalty(0)
-{
-}
