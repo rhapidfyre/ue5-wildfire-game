@@ -4,6 +4,7 @@
 #include "Lib/WfCalloutData.h"
 
 #include "Actors/WfPropertyActor.h"
+#include "Actors/WfVoxManager.h"
 #include "Characters/WfFfCharacterBase.h"
 #include "Net/UnrealNetwork.h"
 #include "Statics/WfGameModeBase.h"
@@ -13,6 +14,52 @@
 
 DEFINE_LOG_CATEGORY(LogCallouts);
 
+// Helper function to convert a digit character to its word equivalent
+FName DigitToWord(TCHAR Digit)
+{
+	switch (Digit)
+	{
+	case '0': return FName("zero");
+	case '1': return FName("one");
+	case '2': return FName("two");
+	case '3': return FName("three");
+	case '4': return FName("four");
+	case '5': return FName("five");
+	case '6': return FName("six");
+	case '7': return FName("seven");
+	case '8': return FName("eight");
+	case '9': return FName("nine");
+	default: return FName();
+	}
+}
+
+// Function to process the address string
+void ProcessAddressString(FString AddressString, TArray<FName>& VoxAddresses)
+{
+	// Split the address string into words
+	TArray<FString> AddressComponents;
+	AddressString.ParseIntoArrayWS(AddressComponents);
+
+	// Process each component
+	for (FString Component : AddressComponents)
+	{
+		// Check if the component is a number
+		for (int32 i = 0; i < Component.Len(); i++)
+		{
+			if (FChar::IsDigit(Component[i]))
+			{
+				// Convert each digit to its word equivalent and add to the array
+				VoxAddresses.Add(DigitToWord(Component[i]));
+			}
+			else
+			{
+				// If it's not a digit, add the word as is
+				VoxAddresses.Add(FName(*Component.ToLower()));
+				break;
+			}
+		}
+	}
+}
 
 FCalloutEquipmentUse::FCalloutEquipmentUse()
 	: bNoConsume(false), TotalUsageValue(1.0f)
@@ -286,6 +333,20 @@ void AWfCalloutActor::DispatchInitial()
 	GetWorldTimerManager().SetTimer(CalloutTimer, CalloutDelegate, 1.0f, true, 1.0f);
 
 	Multicast_DispatchPreAlert();
+
+	TArray<FName> VoxPhrases = {"start_tx", "alert3", "_blank", "golden_crest", "_blank"};
+	VoxPhrases.Add(CalloutData.CalloutData.VoxPhrases); // Call Type
+	ProcessAddressString(CalloutData.PropertyActor->GetStreetAddressAsString(), VoxPhrases);
+
+	VoxPhrases.Add("_blank");
+	VoxPhrases.Add("stop_tx");
+
+	// Get the Vox Singleton and send the pre-alert
+	AWfVoxManager* VoxManager = AWfVoxManager::GetInstance(GetWorld());
+	if (IsValid(VoxManager))
+	{
+		VoxManager->SpeakSentence(VoxPhrases, false, true);
+	}
 }
 
 /**
@@ -345,6 +406,7 @@ void AWfCalloutActor::Multicast_DispatchPreAlert_Implementation()
 	APlayerController* PlayerController = LocalPlayer->GetPlayerController(WorldReference);
 	if (!IsValid(PlayerController)) return;
 
+	// Notify the PlayerState of the new callout
 	AWfPlayerStateBase* PlayerState = Cast<AWfPlayerStateBase>(PlayerController->PlayerState);
 	if (IsValid(PlayerState))
 	{

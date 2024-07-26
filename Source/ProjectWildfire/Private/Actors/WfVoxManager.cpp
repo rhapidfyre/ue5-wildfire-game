@@ -233,12 +233,6 @@ void AWfVoxManager::Multicast_Speak_Implementation(const FVoxCallout& VoxCallout
 void AWfVoxManager::Multicast_SpeakSentence_Implementation(
 	const TArray<FName>& VoxPhrases, bool bSpatialAudio, bool bNotifyDelegates)
 {
-	if (!IsValid(VoxDataTable))
-	{
-		UE_LOGFMT(LogTemp, Error, "AWfVoxManager(): VoxDataTable not specified. Vox will not work.");
-		return;
-	}
-
 	TArray<FVoxData> VoxAnnouncement;
 	for (const auto& VoxPhrase : VoxPhrases)
 	{

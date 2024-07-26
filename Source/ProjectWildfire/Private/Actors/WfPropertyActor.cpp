@@ -42,13 +42,13 @@ void AWfPropertyActor::DetermineAddress()
 	FString NorthSouth = "South";
 	if (WorldLocation.X < 0.0f) EastWest = "West";
 	if (WorldLocation.Y < 0.0f) NorthSouth = "North";
-	PropertyAddress.StreetName = "Untitled";
+	PropertyAddress.StreetName = "First";
 	PropertyAddress.StreetType = "Street";
 
 	// Assign Block & House Numbers
 	// -Y North +Y South -X West +X East
-	PropertyAddress.BlockNumber = FMath::RoundToInt(WorldLocation.X / 10000);
-	PropertyAddress.HouseNumber = FMath::RoundToInt(WorldLocation.X /    10);
+	PropertyAddress.BlockNumber = FMath::Abs(FMath::RoundToInt(WorldLocation.X / 10000));
+	PropertyAddress.HouseNumber = FMath::Abs(FMath::RoundToInt(WorldLocation.X /    10));
 }
 
 void AWfPropertyActor::Tick(float DeltaTime)
