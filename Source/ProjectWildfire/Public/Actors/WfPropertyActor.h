@@ -24,6 +24,7 @@ public:
 
 	UFUNCTION(BlueprintPure) FStreetAddress GetStreetAddress() const;
 	UFUNCTION(BlueprintPure) FString GetStreetAddressAsString() const;
+	UFUNCTION(BlueprintPure) FString GetStreetAddressForVox() const;
 
 protected:
 

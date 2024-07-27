@@ -94,10 +94,8 @@ void AWfPlayerState::BeginPlay()
 
 			if (IsValid(NewPlayerSave))
 			{
-				for (const auto& FireFighter : PersonnelData)
-				{
-					NewPlayerSave->SavedPersonnel.Add(FireFighter.CharacterReference->GetFirefighterJobContract());
-				}
+				// TODO - Set up saving of default personnel
+				UE_LOGFMT(LogTemp, Warning, "Saving of generated personnel is not yet implemented!");
 				UGameplayStatics::SaveGameToSlot(NewPlayerSave, SaveSlotName, SaveUserIndex);
 			}
 

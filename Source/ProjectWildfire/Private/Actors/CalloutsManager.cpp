@@ -76,7 +76,6 @@ ACalloutsManager* ACalloutsManager::GetInstance(UObject* WorldContext)
 					return *It;
 				}
 
-				// If no instance exists, spawn one (optional)
 				Instance = World->SpawnActor<ACalloutsManager>();
 			}
 		}

@@ -18,13 +18,5 @@ void UWfScheduleComponent::BeginPlay()
 
 bool UWfScheduleComponent::IsOnDuty() const
 {
-	AWfGameModeBase* GameMode = Cast<AWfGameModeBase>( GetWorld()->GetAuthGameMode() );
-	if (IsValid(GameMode))
-	{
-		FDateTime CurrentTime = GameMode->GetGameDateTime();
-		EDayOfWeek DayOfWeek = CurrentTime.GetDayOfWeek();
-		FTimespan  TimeOfDay = CurrentTime.GetTimeOfDay();
-		return true;
-	}
 	return false;
 }

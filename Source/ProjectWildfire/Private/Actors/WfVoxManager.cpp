@@ -1,7 +1,7 @@
 ﻿// Fill out your copyright notice in the Description page of Project Settings.
 
 
-#include "WfVoxManager.h"
+#include "Actors/WfVoxManager.h"
 
 #include "Kismet/GameplayStatics.h"
 #include "Logging/StructuredLog.h"
@@ -19,7 +19,10 @@ FVoxCallout::FVoxCallout()
 AWfVoxManager* AWfVoxManager::Instance = nullptr;
 
 AWfVoxManager::AWfVoxManager()
-	: VoxAttenuation(nullptr), VoxDataTable(nullptr)
+	: VoxAttenuation(nullptr),
+	  VoxDataTable(nullptr),
+	  AudioComponent(nullptr),
+	  CurrentIndex(0)
 {
 	PrimaryActorTick.bCanEverTick = true;
 }
@@ -71,7 +74,7 @@ FVoxData AWfVoxManager::GetVoxData(const FName& VoxPhrase)
 		VoxData.VoxSound		 = VoxDataRow->VoxSound;
 		VoxData.Attenuation		 = VoxAttenuation;
 		VoxData.SoundLength		 = IsValid(VoxDataRow->VoxSound) ? VoxDataRow->VoxSound->Duration : 0.25f;
-		VoxData.PauseLength		 = 0.05f; // Buffer to prevent overlapping sounds
+		VoxData.PauseLength		 = 0.06f; // Buffer to prevent overlapping sounds
 		return VoxData;
 	}
 	UE_LOGFMT(LogTemp, Error, "AWfVoxManager({NetMode}): Unable to find vox data for phrase '{VoxPhrase}'."
@@ -125,24 +128,43 @@ void AWfVoxManager::SpeakSentence(const TArray<FName>& VoxPhrases, bool bSpatial
 
 void AWfVoxManager::SpeakRadio(const FString& RadioSentence)
 {
-	// ex: "control Medic 101 staffed, available."
-	FString ProcessedSentence = RadioSentence
-		.Replace(TEXT(","), TEXT(" _comma"))
-		.Replace(TEXT("."), TEXT(" _period"));
+	FString NewSentence = RadioSentence;
 
-	// Replace other special characters with a blank space
-	for (TCHAR& Char : ProcessedSentence)
+	// Replace blanks, commas, and period
+	FString FinalSentence = NewSentence
+		.Replace(TEXT(","), TEXT("_comma"))		// replace commas
+		.Replace(TEXT("-"), TEXT(" _blank "))	// replace hyphens
+		.Replace(TEXT(" _ "), TEXT(" _blank "))	// replace underscores
+		.Replace(TEXT("."), TEXT("_period"))	// Replace periods
+	;
+
+	// Replace special characters with a blank space
+	FString ProcessedSentence;
+	bool bPreviousWhitespace = false;
+	for (TCHAR& Char : FinalSentence)
 	{
-		if (!FChar::IsAlnum(Char) && Char != '_' && Char != ' ')
+		if (FChar::IsWhitespace(Char) || (!FChar::IsAlnum(Char) && Char != '_' && Char != ' '))
 		{
-			Char = ' ';
+			if (!bPreviousWhitespace)
+			{
+				ProcessedSentence.AppendChar(' ');
+				bPreviousWhitespace = true;
+			}
+		}
+		else
+		{
+			ProcessedSentence.AppendChar(Char);
+			bPreviousWhitespace = false;
 		}
 	}
 
-	TArray<FString> Words = {"start_tx"};
+	// Build Transmission
+	TArray<FString> Words;
 	ProcessedSentence.ParseIntoArray(Words, TEXT(" "), true);
+	Words.Insert("start_tx", 0);
 	Words.Add("stop_tx");
 
+	// Convert numbers to be read properly
 	TArray<FVoxData> VoxDataArray;
     for (FString& Word : Words)
     {
@@ -204,6 +226,7 @@ void AWfVoxManager::SpeakRadio(const FString& RadioSentence)
             VoxDataArray.Add(GetVoxData(FName(*Word)));
         }
     }
+
 	FString RadioMessage;
 	for (int i = 0; i < VoxDataArray.Num(); ++i)
 	{
@@ -211,7 +234,8 @@ void AWfVoxManager::SpeakRadio(const FString& RadioSentence)
 		if (i + 1 < VoxDataArray.Num())
 			RadioMessage += " ";
 	}
-	UE_LOGFMT(LogTemp, Display, "Processed Radio Message: {RadioMessage}", RadioMessage);
+	UE_LOGFMT(LogTemp, Display, "VoxManager({NetMode}): RADIO '{RadioMessage}'"
+		, HasAuthority() ? "SRV" : "CLI", RadioMessage);
 	Multicast_RadioCall(VoxDataArray);
 }
 
@@ -249,9 +273,6 @@ void AWfVoxManager::Multicast_SpeakSentence_Implementation(
 		if (i + 1 < VoxPhrases.Num())
 			FullVoxPhrase += " ";
 	}
-
-	UE_LOGFMT(LogTemp, Display, "AWfVoxManager({NetMode}): Received Multicast Vox Phrase: '{FullVoxPhrase}'"
-		, HasAuthority() ? "SRV" : "CLI", FullVoxPhrase);
 	Speak_Internal(VoxAnnouncement);
 }
 
@@ -266,81 +287,20 @@ void AWfVoxManager::Server_RadioCall_Implementation(const TArray<FVoxData>& Radi
 	Multicast_RadioCall(RadioPhrase);
 }
 
-void AWfVoxManager::Speak_Internal(TArray<FVoxData> VoxAnnouncement)
+void AWfVoxManager::Speak_Internal(const TArray<FVoxData>& VoxAnnouncement)
 {
-	if (VoxAnnouncement.Num() > 0)
+	if (AudioComponent && AudioComponent->IsPlaying())
 	{
-		const FVoxData VoxPhrase = VoxAnnouncement[0];
-		VoxAnnouncement.RemoveAt(0);
-
-		if (IsValid(VoxPhrase.VoxSound))
-		{
-			UAudioComponent* AudioComponent = nullptr;
-			if (VoxPhrase.bSpatialAudio)
-			{
-				AudioComponent = UGameplayStatics::SpawnSoundAtLocation(GetWorld(),
-					VoxPhrase.VoxSound, GetActorLocation(), FRotator(0.0f), VoxPhrase.Volume,
-					VoxPhrase.Pitch, VoxPhrase.StartOffset, VoxPhrase.Attenuation);
-				UE_LOGFMT(LogTemp, Display, "AWfVoxManager({NetMode}): Playing Spatial Audio -> '{FullVoxPhrase}'"
-					, HasAuthority() ? "SRV" : "CLI", VoxPhrase.VoxPhrase);
-			}
-			else
-			{
-				AudioComponent = UGameplayStatics::SpawnSound2D(GetWorld(),
-				VoxPhrase.VoxSound, VoxPhrase.Volume, VoxPhrase.Pitch, VoxPhrase.StartOffset);
-				UE_LOGFMT(LogTemp, Display, "AWfVoxManager({NetMode}): Playing UI Audio -> '{FullVoxPhrase}'"
-					, HasAuthority() ? "SRV" : "CLI", VoxPhrase.VoxPhrase);
-			}
-
-			if (AudioComponent)
-			{
-				AudioComponent->OnAudioFinished.AddDynamic(this, &AWfVoxManager::OnAudioFinished);
-			}
-
-			if (VoxPhrase.bNotifyDelegates && OnVoxAnnouncement.IsBound())
-			{
-				OnVoxAnnouncement.Broadcast(VoxPhrase);
-			}
-		}
-		else
-		{
-			UE_LOGFMT(LogTemp, Error, "AWfVoxManager({NetMode}): Invalid sound asset for phrase {UsingPhrase}"
-				, HasAuthority() ? "SRV" : "CLI", VoxPhrase.VoxPhrase.ToString());
-		}
-
-		if (VoxAnnouncement.Num() > 0)
-		{
-			FString FullVoxPhrase = "";
-			for (int i = 0; i < VoxAnnouncement.Num(); ++i)
-			{
-				FullVoxPhrase += VoxAnnouncement[i].VoxPhrase.ToString();
-				if (i + 1 < VoxAnnouncement.Num())
-				{
-					FullVoxPhrase += " ";
-				}
-			}
-
-			FString RemainingPhrases;
-			for (int i = 0; i < VoxAnnouncement.Num(); ++i)
-			{
-				RemainingPhrases += VoxAnnouncement[i].VoxPhrase.ToString();
-				if (i + 1 < VoxAnnouncement.Num())
-					RemainingPhrases += " ";
-			}
-			UE_LOGFMT(LogTemp, Display, "AWfVoxManager({NetMode}): Playing remaining audio recursively -> '{RemainingPhrases}'"
-				, HasAuthority() ? "SRV" : "CLI", RemainingPhrases);
-
-			FTimerDelegate SpeakDelegate;
-			SpeakDelegate.BindUObject(this, &AWfVoxManager::Speak_Internal, VoxAnnouncement);
-			GetWorld()->GetTimerManager().SetTimer(SpeakTimer, SpeakDelegate, VoxAnnouncement[0].SoundLength, false);
-		}
-		else
-		{
-			UE_LOGFMT(LogTemp, Display, "AWfVoxManager({NetMode}): No audio phrases remaining.", HasAuthority() ? "SRV" : "CLI");
-		}
-		return;
+		VoxQueue.Enqueue(VoxAnnouncement);
+		UE_LOGFMT(LogTemp, Warning, "VoxManager(): Received Vox request while playing. Placed into queue.");
 	}
-	SpeakTimer.Invalidate();
+	else if (VoxAnnouncement.Num() > 0)
+	{
+		LoadSoundClips(VoxAnnouncement);
+		CurrentVox = VoxAnnouncement;
+		CurrentIndex = 0;
+		PlayNextPhrase();
+	}
 }
 
 void AWfVoxManager::BeginPlay()
@@ -363,10 +323,107 @@ void AWfVoxManager::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 void AWfVoxManager::OnAudioFinished()
 {
-	UE_LOGFMT(LogTemp, Display, "AWfVoxManager({NetMode}): Audio playback finished.", HasAuthority() ? "SRV" : "CLI");
+	CurrentIndex++;
+	if (CurrentIndex < CurrentVox.Num())
+	{
+		const FVoxData& VoxPhrase = CurrentVox[CurrentIndex];
+		if (VoxPhrase.PauseLength > 0)
+		{
+			GetWorld()->GetTimerManager().SetTimer(SpeakTimer, this,
+				&AWfVoxManager::PlayNextPhrase, VoxPhrase.PauseLength, false);
+		}
+		else
+		{
+			PlayNextPhrase();
+		}
+	}
+	else
+	{
+		UnloadSoundClips();
+
+		// Wait 3 seconds before executing the next announcement in the queue
+		GetWorld()->GetTimerManager().SetTimer(SpeakTimer, this,
+			&AWfVoxManager::ProcessNextInQueue, 3.0f, false);
+	}
+}
+
+void AWfVoxManager::ProcessNextInQueue()
+{
+	if (!VoxQueue.IsEmpty())
+	{
+		TArray<FVoxData> NextVoxAnnouncement;
+		VoxQueue.Dequeue(NextVoxAnnouncement);
+		Speak_Internal(NextVoxAnnouncement);
+	}
 }
 
 void AWfVoxManager::Initialize()
 {
     Instance = this;
+}
+
+void AWfVoxManager::PlayNextPhrase()
+{
+	if (CurrentIndex < CurrentVox.Num())
+	{
+		const FVoxData& VoxPhrase = CurrentVox[CurrentIndex];
+
+		if (IsValid(VoxPhrase.VoxSound))
+		{
+			if (!AudioComponent)
+			{
+				AudioComponent = NewObject<UAudioComponent>(this);
+				AudioComponent->OnAudioFinished.AddDynamic(this, &AWfVoxManager::OnAudioFinished);
+			}
+
+			AudioComponent->SetSound(VoxPhrase.VoxSound);
+			AudioComponent->SetVolumeMultiplier(VoxPhrase.Volume);
+			AudioComponent->SetPitchMultiplier(VoxPhrase.Pitch);
+			AudioComponent->Play(VoxPhrase.StartOffset);
+
+			UE_LOG(LogTemp, Display, TEXT("AWfVoxManager(%s): Playing %s Audio -> '%s' (%f s)"),
+				HasAuthority() ? TEXT("SRV") : TEXT("CLI"),
+				VoxPhrase.bSpatialAudio ? TEXT("Spatial") : TEXT("UI"),
+				*VoxPhrase.VoxPhrase.ToString(), VoxPhrase.SoundLength);
+
+			if (VoxPhrase.bNotifyDelegates && OnVoxAnnouncement.IsBound())
+			{
+				OnVoxAnnouncement.Broadcast(VoxPhrase);
+			}
+		}
+		else
+		{
+			UE_LOG(LogTemp, Error, TEXT("AWfVoxManager(%s): Invalid sound asset for phrase %s"),
+				HasAuthority() ? TEXT("SRV") : TEXT("CLI"), *VoxPhrase.VoxPhrase.ToString());
+			OnAudioFinished(); // Skip to the next phrase
+		}
+	}
+}
+
+void AWfVoxManager::LoadSoundClips(const TArray<FVoxData>& VoxAnnouncement)
+{
+	for (const FVoxData& VoxPhrase : VoxAnnouncement)
+	{
+		if (VoxPhrase.VoxSound)
+		{
+			FName SoundName = VoxPhrase.VoxSound->GetFName();
+			if (!PreloadedSounds.Contains(SoundName))
+			{
+				PreloadedSounds.Add(SoundName, VoxPhrase.VoxSound);
+				VoxPhrase.VoxSound->AddToRoot(); // Prevents garbage collection
+			}
+		}
+	}
+}
+
+void AWfVoxManager::UnloadSoundClips()
+{
+	for (auto& Elem : PreloadedSounds)
+	{
+		if (Elem.Value)
+		{
+			Elem.Value->RemoveFromRoot();
+		}
+	}
+	PreloadedSounds.Empty();
 }

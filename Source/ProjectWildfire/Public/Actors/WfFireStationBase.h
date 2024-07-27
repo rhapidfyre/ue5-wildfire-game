@@ -42,6 +42,9 @@ public:
 	AWfFireStationBase();
 
 	UFUNCTION(BlueprintPure)
+	int GetFireStationNumber() const { return FireStationNumber; }
+
+	UFUNCTION(BlueprintPure)
 	TArray<UParkingSpotComponent*> GetParkingSpots() const { return ParkingSpots; }
 
 	UFUNCTION(BlueprintPure)

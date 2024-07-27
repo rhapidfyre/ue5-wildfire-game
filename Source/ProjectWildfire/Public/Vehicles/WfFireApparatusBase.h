@@ -45,6 +45,9 @@ public:
 	UFUNCTION(BlueprintCallable) void
 	SetApparatusIdentity(FString NewIdentity);
 
+	void SetFireStationIdentity(const int32 NewIdentity) { IdentityStation = NewIdentity; }
+	void SetUniqueIdentity(const int32 NewIdentity) { IdentityStation = NewIdentity; }
+
 	virtual void Tick(float DeltaTime) override;
 
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
@@ -52,6 +55,8 @@ public:
 protected:
 
 	virtual void BeginPlay() override;
+
+	virtual void OnConstruction(const FTransform& Transform) override;
 
 	virtual void GetLifetimeReplicatedProps(
 		TArray<FLifetimeProperty>& OutLifetimeProps) const override;
@@ -62,6 +67,9 @@ protected:
 public: // Public Members
 
 	UPROPERTY(BlueprintAssignable) FOnApparatusIdentityChanged OnApparatusIdentityChanged;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Actor Settings")
+	FString FireApparatusType = "None";
 
 private: // Private Members
 

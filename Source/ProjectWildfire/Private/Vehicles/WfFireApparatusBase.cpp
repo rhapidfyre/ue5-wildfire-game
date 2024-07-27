@@ -10,7 +10,7 @@ AWfFireApparatusBase::AWfFireApparatusBase()
 {
 	PrimaryActorTick.bCanEverTick = true;
 	IdentityStation   = 1;
-	IdentityType = "Utility";
+	IdentityType	  = "None";
 	IdentityUnique    = 1;
 }
 
@@ -67,6 +67,12 @@ void AWfFireApparatusBase::SetApparatusIdentity(FString NewIdentity)
 void AWfFireApparatusBase::BeginPlay()
 {
 	Super::BeginPlay();
+}
+
+void AWfFireApparatusBase::OnConstruction(const FTransform& Transform)
+{
+	if (FireApparatusType != "None")
+		IdentityType = FireApparatusType;
 }
 
 void AWfFireApparatusBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const

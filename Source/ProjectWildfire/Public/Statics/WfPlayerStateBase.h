@@ -21,43 +21,6 @@ class UWfFirefighterSaveGame;
 
 
 USTRUCT(BlueprintType)
-struct PROJECTWILDFIRE_API FFirefighterAssignment
-{
-	GENERATED_BODY()
-
-	FFirefighterAssignment();
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Firefighter Assignment")
-	AWfFireApparatusBase* AssignedVehicle;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Firefighter Assignment")
-	AWfFfCharacterBase* CharacterReference;
-
-};
-
-
-USTRUCT(BlueprintType)
-struct PROJECTWILDFIRE_API FFireApparatusFleet
-{
-	GENERATED_BODY()
-
-	FFireApparatusFleet();
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Fleet")
-	AWfFireApparatusBase* VehicleReference;
-
-	// Which fire station the apparatus is assigned to
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Fleet")
-	AWfFireStationBase* FireStationBase;
-
-	// Which incident the apparatus is assigned to
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Fleet")
-	AWfCalloutActor* CalloutAssigned;
-
-};
-
-
-USTRUCT(BlueprintType)
 struct PROJECTWILDFIRE_API FFleetPurchaseData : public FTableRowBase
 {
 	GENERATED_BODY()
@@ -86,28 +49,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(
 	FOnResourceUpdated, const FGameplayTag&, ResourceTag, const float, OldValue, const float, NewValue);
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
-	FOnFirefighterHired, const AWfFfCharacterBase*, ActorFirefighter);
-
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
-	FOnFirefighterFired, const AWfFfCharacterBase*, ActorFirefighter);
-
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
-	FOnFirefighterDeath, const AWfFfCharacterBase*, ActorFirefighter);
-
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	FOnFireApparatusPurchaseFail, const FText&, FailureReason);
-
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
-	FOnFireApparatusPurchase, const AWfFireApparatusBase*, NewFireApparatus);
-
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
-	FOnFireApparatusDestroyed, const AWfFireApparatusBase*, NewFireApparatus);
-
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
-	FOnAssignmentChanged, const FFirefighterAssignment&, AssignmentData);
-
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
-	FOnFleetChanged, const FFireApparatusFleet&, AssignmentData);
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	FOnIncidentReceived, const AWfCalloutActor*, CalloutActor);
@@ -136,17 +78,6 @@ public:
 
 	AWfPlayerStateBase();
 
-	void NotifyCallout(const AWfCalloutActor* CalloutActor);
-
-	UFUNCTION(BlueprintPure)
-	FDateTime GetGameDateTime() const { return GameDateTime; }
-
-	UFUNCTION(BlueprintCallable)
-	void AssignToCallout(AWfFireApparatusBase* FireApparatus, AWfCalloutActor* CalloutActor);
-
-	UFUNCTION(BlueprintCallable)
-	void UnassignFromCallout(AWfFireApparatusBase* FireApparatus);
-
 	UFUNCTION(BlueprintCallable)
 	AWfFfCharacterBase* AcceptJobContract(
 		const FJobContractData& JobContract, FString& FailureContext);
@@ -155,22 +86,10 @@ public:
 	FGameplayTagContainer GetAllResourceTags() const;
 
 	UFUNCTION(BlueprintPure)
-	TArray<FFirefighterAssignment> GetAllPersonnel() const { return PersonnelData; }
-
-	UFUNCTION(BlueprintPure)
-	TArray<FFireApparatusFleet> GetVehicleFleetData() const { return FleetData; }
-
-	UFUNCTION(BlueprintPure)
 	AWfFireStationBase* GetFireStationReference() const;
-
-	UFUNCTION(BlueprintPure)
-	AWfFireApparatusBase* GetAssignedApparatus(const AWfFfCharacterBase* FireFighter);
 
 	UFUNCTION(BlueprintCallable)
 	void PurchaseFireApparatus(const FFleetPurchaseData& PurchaseData);
-
-	UFUNCTION(BlueprintCallable)
-	void SetAssignedApparatus(AWfFfCharacterBase* FireCharacter, AWfFireApparatusBase* FireApparatus);
 
 	UFUNCTION(BlueprintPure)
 	float GetMoney() const;
@@ -225,16 +144,14 @@ public:
 
 protected:
 
-	UFUNCTION(NetMulticast, Reliable)
-	void Multicast_ApparatusAssignment(const AWfFireApparatusBase* FireApparatus, const AWfCalloutActor* CalloutActor);
+	UFUNCTION(Server, Reliable)
+	void Server_AcceptJobContract(const FJobContractData& JobContract);
 
 	UFUNCTION(Server, Reliable)
-	void Server_AcceptContract(const FJobContractData& JobContract);
+	void Server_SetFireStationReference(AWfFireStationBase* FireStation);
 
 	UFUNCTION(Server, Reliable)
 	void Server_PurchaseFireApparatus(const FFleetPurchaseData& PurchaseData);
-
-	UFUNCTION() void HourlyTick(const FDateTime& NewDateTime);
 
 	virtual void SetupInitialResourceValues();
 
@@ -244,47 +161,15 @@ protected:
 	UFUNCTION(Client, Reliable, BlueprintCallable)
 	void Client_PurchaseError(const FText& ErrorReason);
 
-	UFUNCTION(Server, Reliable, BlueprintCallable)
-	void Server_SetFireStation(AWfFireStationBase* FireStation);
-
-	UFUNCTION(BlueprintCallable)
-	void Server_AssignToCallout(AWfFireApparatusBase* FireApparatus, AWfCalloutActor* CalloutActor);
-
-	UFUNCTION(BlueprintCallable)
-	void Server_UnassignFromCallout(AWfFireApparatusBase* FireApparatus);
-
-	UFUNCTION()
-	void SynchronizeTime();
+	virtual void SetupListeners();
 
 private:
-
-	UFUNCTION(Client, Reliable)
-	void Client_FireApparatusPurchased(const FFireApparatusFleet& NewApparatusData);
-
-	UFUNCTION(Server, Reliable)
-	void Server_SetAssignedApparatus(AWfFfCharacterBase* FireCharacter, AWfFireApparatusBase* FireApparatus);
-
-	UFUNCTION(NetMulticast, Reliable)
-	void OnRep_PersonnelData(const TArray<FFirefighterAssignment>& OldAssignments);
-
-	UFUNCTION(NetMulticast, Reliable)
-	void OnRep_FleetData(const TArray<FFireApparatusFleet>& OldFleetData);
-
 
 	UFUNCTION(BlueprintCallable)
 	void SetResourceValue(const FGameplayTag& ResourceTag, const float NewValue = 0.0f);
 
 	UFUNCTION(NetMulticast, Reliable)
-	void OnRep_FireStation();
-
-	UFUNCTION(NetMulticast, Reliable)
-	void Multicast_FirefighterHired(const AWfFfCharacterBase* NewFirefighter);
-
-	UFUNCTION(NetMulticast, Reliable)
-	void Multicast_FirefighterFired(const AWfFfCharacterBase* OldFirefighter);
-
-	UFUNCTION(NetMulticast, Reliable)
-	void Multicast_FirefighterDeath(const AWfFfCharacterBase* DeadFirefighter);
+	void OnRep_FireStationBase(const AWfFireStationBase* OldFireStation);
 
 
 	UFUNCTION(BlueprintCallable)
@@ -302,41 +187,18 @@ private:
 public:
 
 	UPROPERTY(BlueprintAssignable)	FOnResourceUpdated OnResourceUpdated;
-	UPROPERTY(BlueprintAssignable)	FOnFirefighterHired OnFirefighterHired;
-	UPROPERTY(BlueprintAssignable)	FOnFirefighterFired OnFirefighterFired;
-	UPROPERTY(BlueprintAssignable)	FOnFirefighterDeath OnFirefighterDeath;
 	UPROPERTY(BlueprintAssignable)	FOnFireStationChanged OnFireStationChanged;
-	UPROPERTY(BlueprintAssignable)	FOnFireApparatusPurchase OnFireApparatusPurchase;
-	UPROPERTY(BlueprintAssignable)	FOnFireApparatusDestroyed OnFireApparatusDestroyed;
 	UPROPERTY(BlueprintAssignable)	FOnFireApparatusPurchaseFail OnFireApparatusPurchaseFail;
-	UPROPERTY(BlueprintAssignable)	FOnAssignmentChanged OnAssignmentChanged;
-	UPROPERTY(BlueprintAssignable)	FOnIncidentReceived OnIncidentReceived;
-	UPROPERTY(BlueprintAssignable)	FOnIncidentExpired OnIncidentExpired;
-	UPROPERTY(BlueprintAssignable)	FOnFleetChanged OnFleetChanged;
-	UPROPERTY(BlueprintAssignable)	FOnApparatusAssignment OnApparatusAssignment;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Actor Settings")
 	TSubclassOf<AAIController> UsingAiController;
 
-protected:
-
-	// All hired firefighters belonging to the player
-	UPROPERTY(ReplicatedUsing=OnRep_PersonnelData) TArray<FFirefighterAssignment> PersonnelData;
-
-	// All fire apparatus owned by the player
-	UPROPERTY(ReplicatedUsing=OnRep_FleetData) TArray<FFireApparatusFleet>	 FleetData;
-
 private:
 
-	UPROPERTY(ReplicatedUsing=OnRep_FireStation)
+	// The fire station that the player owns
+	UPROPERTY(ReplicatedUsing=OnRep_FireStationBase)
 	AWfFireStationBase* FireStationBase;
 
-	UPROPERTY()
-	AWfGameModeBase* GameModeBase;
-
 	TMap<FGameplayTag, float> Resources;
-
-	UPROPERTY(Replicated) FDateTime GameDateTime;
-	FTimerHandle GameDateTimer;
 
 };

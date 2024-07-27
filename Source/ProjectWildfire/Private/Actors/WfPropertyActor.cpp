@@ -70,3 +70,21 @@ FString AWfPropertyActor::GetStreetAddressAsString() const
 		AppendSuite = " #" + FString::FromInt(StreetAddress.SuiteNumber);
 	return HouseNumber + AppendSuite + " " + StreetAddress.StreetName.ToString() + " " + StreetAddress.StreetType.ToString();
 }
+
+// Changes "123 Easy Street" into "1, 2, 3, Easy, Street."
+FString AWfPropertyActor::GetStreetAddressForVox() const
+{
+	FString AddressString = GetStreetAddressAsString();
+
+	// "123 Easy Street" -> "1 2 3 Easy Street"
+	FString NewSentence;
+	for (TCHAR& SentenceChar : AddressString)
+	{
+		NewSentence += SentenceChar;
+		if (FChar::IsDigit(SentenceChar))
+			NewSentence += " ";
+	}
+    NewSentence.TrimStartAndEndInline();
+
+	return NewSentence;
+}

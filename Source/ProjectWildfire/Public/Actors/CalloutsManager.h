@@ -21,7 +21,7 @@ public:
 
 	ACalloutsManager();
 
-	UFUNCTION(BlueprintCallable, Category = "Callouts Manager", meta = (WorldContext = "WorldContextObject"))
+	UFUNCTION(BlueprintCallable, Category = "Callouts Manager Singleton", meta = (WorldContext = "WorldContextObject"))
 	static ACalloutsManager* GetInstance(UObject* WorldContext);
 
 	UFUNCTION(BlueprintCallable) void ForceCallout(const FName& CalloutType);

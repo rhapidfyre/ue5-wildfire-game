@@ -19,6 +19,18 @@ DECLARE_LOG_CATEGORY_EXTERN(LogCallouts, Log, All);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCalloutDispatchInitial, const AWfCalloutActor*, CalloutActor);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCalloutDispatchFull, const AWfCalloutActor*, CalloutActor);
 
+UENUM(BlueprintType)
+enum class EIncidentType : uint8
+{
+	Medical = 0,
+	Structure,
+	Vegetation,
+	Collision,
+	HazMat,
+	HighVoltage,
+	Gas
+};
+
 
 // Data about equipment usage when managing a task
 USTRUCT(BlueprintType)
@@ -172,6 +184,8 @@ struct PROJECTWILDFIRE_API FCallouts : public FTableRowBase
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Callouts") int	DeadlineHours; // Hrs until penalized
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Callouts") int	DeadlineMinutes; // Mins until penalized
 
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Callouts") EIncidentType TypeOfIncident;
+
 	// The dispatch phrase that describes this call out ("cardiac", "hazmat", etc.)
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Callouts") FName VoxPhrases;
 
@@ -229,6 +243,11 @@ public:
 
 	AWfCalloutActor();
 
+	UFUNCTION(BlueprintPure)
+	int GetIncidentNumber() const { return IncidentNumber; }
+
+	void SetIncidentNumber(const int NewNumber) { IncidentNumber = NewNumber; }
+
 	void SetCalloutData(FCallouts& NewCallout, const float SecondsToStart = 30.0f);
 
 	UFUNCTION(BlueprintCallable)
@@ -280,6 +299,8 @@ private:
 	FTimerHandle CalloutTimer;
 
 	FTimerHandle ExpirationTimer;
+
+	int IncidentNumber;
 
 	// Once set to true, the callout cannot be modified.
 	bool bCalloutReady = false;

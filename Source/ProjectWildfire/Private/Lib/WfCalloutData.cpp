@@ -3,6 +3,7 @@
 
 #include "Lib/WfCalloutData.h"
 
+#include "Actors/GameManager.h"
 #include "Actors/WfPropertyActor.h"
 #include "Actors/WfVoxManager.h"
 #include "Characters/WfFfCharacterBase.h"
@@ -87,7 +88,8 @@ FCalloutUnits::FCalloutUnits()
 }
 
 FCallouts::FCallouts()
-	: AlertLevel(0),
+	: DisplayIcon(nullptr),
+	  AlertLevel(0),
 	  Payment(0),
 	  Penalty(0),
 	  DifficultyMin(0),
@@ -101,7 +103,8 @@ FCallouts::FCallouts()
 	  MaxFires(0),
 	  DeadlineDays(0),
 	  DeadlineHours(0),
-	  DeadlineMinutes(0)
+	  DeadlineMinutes(0),
+	  TypeOfIncident(EIncidentType::Medical)
 {
 }
 
@@ -117,7 +120,7 @@ FCalloutData::FCalloutData(const FCallouts& NewCallout)
 	CalloutActor = AWfCalloutActor::StaticClass();
 }
 
-AWfCalloutActor::AWfCalloutActor()
+AWfCalloutActor::AWfCalloutActor(): IncidentNumber(0)
 {
 }
 
@@ -242,12 +245,10 @@ void AWfCalloutActor::SetCalloutData(FCallouts& NewCallout, const float SecondsT
  */
 bool AWfCalloutActor::StartCallout()
 {
-
-	// The callout expiration is after the current date and time
-	const AWfGameModeBase* GameMode = Cast<AWfGameModeBase>(GetWorld()->GetAuthGameMode());
-	if (IsValid(GameMode))
+	const AGameManager* GameManager = AGameManager::GetInstance(GetWorld());
+	if (IsValid(GameManager))
 	{
-		FDateTime GameDateTime = GameMode->GetGameDateTime();
+		const FDateTime GameDateTime = GameManager->GetSimulatedDateTime();
 		if (CalloutData.ResolutionDeadline > GameDateTime)
 		{
 			DispatchInitial();
@@ -274,10 +275,10 @@ bool AWfCalloutActor::StartCallout()
 
 FDateTime AWfCalloutActor::GetGameDateTime() const
 {
-	const AWfGameModeBase* GameMode = Cast<AWfGameModeBase>(GetWorld()->GetAuthGameMode());
-	if (IsValid(GameMode))
+	const AGameManager* GameManager = AGameManager::GetInstance(GetWorld());
+	if (IsValid(GameManager))
 	{
-		FDateTime GameDateTime = GameMode->GetGameDateTime();
+		FDateTime GameDateTime = GameManager->GetSimulatedDateTime();
 		return GameDateTime;
 	}
 	return FDateTime::UtcNow();
@@ -325,6 +326,14 @@ void AWfCalloutActor::DispatchInitial()
 	if (!HasAuthority())
 		return;
 
+	AGameManager* GameManager = AGameManager::GetInstance(GetWorld());
+	if (!IsValid(GameManager))
+	{
+		UE_LOGFMT(LogCallouts, Error, "GameManager Not Found - Cannot Continue Callout!");
+		return;
+	}
+	GameManager->AddIncidentActor(this);
+
 	bCalloutReady = true;
 
 	// Start the callout timer (progression, value detection, etc)
@@ -334,18 +343,20 @@ void AWfCalloutActor::DispatchInitial()
 
 	Multicast_DispatchPreAlert();
 
-	TArray<FName> VoxPhrases = {"start_tx", "alert3", "_blank", "golden_crest", "_blank"};
-	VoxPhrases.Add(CalloutData.CalloutData.VoxPhrases); // Call Type
-	ProcessAddressString(CalloutData.PropertyActor->GetStreetAddressAsString(), VoxPhrases);
+	FName IncidentType = "medical";
+	if (CalloutData.CalloutData.TypeOfIncident != EIncidentType::Medical)
+	{
+		IncidentType = "structure_fire";
+	}
 
-	VoxPhrases.Add("_blank");
-	VoxPhrases.Add("stop_tx");
+	FString VoxSentence = ". alert3 . stop_tx . . start_tx , golden_crest, " + IncidentType.ToString() + ", ";
+	VoxSentence += CalloutData.PropertyActor->GetStreetAddressForVox() + ".";
 
 	// Get the Vox Singleton and send the pre-alert
 	AWfVoxManager* VoxManager = AWfVoxManager::GetInstance(GetWorld());
 	if (IsValid(VoxManager))
 	{
-		VoxManager->SpeakSentence(VoxPhrases, false, true);
+		VoxManager->SpeakRadio(VoxSentence);
 	}
 }
 
@@ -396,22 +407,6 @@ void AWfCalloutActor::Multicast_DispatchPreAlert_Implementation()
 {
 	if (OnCalloutDispatchInitial.IsBound())
 		OnCalloutDispatchInitial.Broadcast(this);
-
-	// Notify all players that there is a new callout
-	UWorld* WorldReference = GetWorld();
-
-	const ULocalPlayer* LocalPlayer = WorldReference->GetFirstLocalPlayerFromController();
-	if (!IsValid(LocalPlayer)) return;
-
-	APlayerController* PlayerController = LocalPlayer->GetPlayerController(WorldReference);
-	if (!IsValid(PlayerController)) return;
-
-	// Notify the PlayerState of the new callout
-	AWfPlayerStateBase* PlayerState = Cast<AWfPlayerStateBase>(PlayerController->PlayerState);
-	if (IsValid(PlayerState))
-	{
-		PlayerState->NotifyCallout(this);
-	}
 }
 
 /**
